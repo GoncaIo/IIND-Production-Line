@@ -1,0 +1,29 @@
+#Version: 0x030217
+#Access: 0
+#Pos: 0,0
+#Size: 777,477
+#BkColor: clBtnFace
+#Gates: 0
+#Style: Maximized
+#StayOnTop: 0
+#Object: HistoricalView
+  #ID: 0
+  #Pos: 50,60
+  #Size: 600,315
+  #DateWidth: 100,"Date"
+  #TimeWidth: 100,"Time"
+  #TimeRange: 3600
+  #RowOptions: 1,1,0,1,0
+  #PageType: 0
+  #Gates: 3
+  #HisGate: DIG,1,0,"%d",100,"1-0",2
+  #HisGate: DIG,1,1,"%d",100,"1-1",2
+  #HisGate: DIG,1,2,"%d",100,"1-2",2
+  #showServerButton: 0
+  #ShowCfgButton: 1
+  #ShowPrintButton: 1
+  #ShowSaveCSVButton: 1
+  #WndBkgndColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #DefaultServer: Local
+#EndObj

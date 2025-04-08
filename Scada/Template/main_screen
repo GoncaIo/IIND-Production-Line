@@ -1,0 +1,619 @@
+#Version: 0x030217
+#Access: 0
+#Pos: 0,0
+#Size: 523,545
+#BkColor: clBtnFace
+#Gates: 20
+  #DIG: 1,0
+  #DIG: 1,1
+  #DIG: 1,2
+  #DIG: 1,3
+  #DIG: 1,4
+  #NUM: 1,0
+  #NUM: 1,1
+  #DIG: 1,5
+  #DIG: 1,12
+  #DIG: 1,11
+  #DIG: 1,10
+  #DIG: 1,9
+  #DIG: 1,8
+  #DIG: 1,7
+  #DIG: 1,6
+  #DIG: 1,17
+  #DIG: 1,16
+  #DIG: 1,15
+  #DIG: 1,14
+  #DIG: 1,13
+#Style: Maximized
+#StayOnTop: 0
+#Object: Led
+  #ID: 0
+  #Pos: 50,230
+  #Size: 65,22
+  #Cursor: 0
+  #OffBmpRes: 31
+  #OnBmpRes: 01
+  #BmpBkC: 0,128,128
+  #Flashing: 0
+  #Access: 0
+#EndObj
+#Object: Led
+  #ID: 0
+  #Pos: 50,385
+  #Size: 65,22
+  #Cursor: 0
+  #OffBmpRes: 31
+  #OnBmpRes: 01
+  #BmpBkC: 0,128,128
+  #Flashing: 0
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 75,185
+  #Size: 105,40
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 10
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 35,150
+  #Size: 95,115
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 9
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 340,495
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Alarms
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 0
+  #Access: 0
+  #OnClick: Template,Alarm_screen
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 420,495
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Events
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 1
+  #Access: 0
+  #OnClick: Template,Events_screen
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 220,115
+  #Size: 82,41
+  #Descr: conveyor2
+  #Cursor: 0
+  #PBmpFile: 0,conveyor_red.png
+  #PBmpFile: 1,conveyor_grey.bmp
+  #PBmpFile: 2,conveyor_green.bmp
+  #TabOrder: 2
+  #Status: 0,6,13,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1X
+  #Status: 1,15,6,0
+  #Status: 2,15,6,1
+  #CycleTime: 0,0
+  #CycleTime: 1,0
+  #CycleTime: 2,0
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 250,125
+  #Size: 21,21
+  #Descr: sensor2
+  #Cursor: 0
+  #PBmpFile: 0,workpiece_blue.png
+  #TabOrder: 3
+  #CycleTime: 0,0
+  #Show: 0,6,1
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 220,160
+  #Size: 82,96
+  #Descr: conveyor1
+  #Cursor: 0
+  #PBmpFile: 0,conveyor_red.png
+  #PBmpFile: 1,conveyor_grey.bmp
+  #PBmpFile: 2,conveyor_green.bmp
+  #TabOrder: 4
+  #Status: 0,6,13,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1
+  #Status: 1,16,6,0
+  #Status: 2,16,6,1
+  #CycleTime: 0,0
+  #CycleTime: 1,0
+  #CycleTime: 2,0
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 250,195
+  #Size: 21,21
+  #Descr: sensor1
+  #Cursor: 0
+  #PBmpFile: 0,workpiece_blue.png
+  #TabOrder: 5
+  #CycleTime: 0,0
+  #Show: 1,6,1
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 220,260
+  #Size: 82,51
+  #Descr: conveyor1
+  #Cursor: 0
+  #PBmpFile: 0,conveyor_red.png
+  #PBmpFile: 1,conveyor_grey.bmp
+  #PBmpFile: 2,conveyor_green.bmp
+  #TabOrder: 6
+  #Status: 0,6,13,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1
+  #Status: 1,17,6,0
+  #Status: 2,17,6,1
+  #CycleTime: 0,0
+  #CycleTime: 1,0
+  #CycleTime: 2,0
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 250,275
+  #Size: 21,21
+  #Descr: sensor1
+  #Cursor: 0
+  #PBmpFile: 0,workpiece_blue.png
+  #TabOrder: 7
+  #CycleTime: 0,0
+  #Show: 2,6,1
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 220,415
+  #Size: 82,41
+  #Descr: conveyor2
+  #Cursor: 0
+  #PBmpFile: 0,conveyor_red.png
+  #PBmpFile: 1,conveyor_grey.bmp
+  #PBmpFile: 2,conveyor_green.bmp
+  #TabOrder: 8
+  #Status: 0,6,13,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1X
+  #Status: 1,19,6,0
+  #Status: 2,19,6,1
+  #CycleTime: 0,0
+  #CycleTime: 1,0
+  #CycleTime: 2,0
+  #Access: 0
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 32,26
+  #Size: 450,72
+  #BkColor: clSkyBlue
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,28,0000
+  #Label: Cell 1
+  #Align: 37
+  #Frame: 4
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 175,155
+  #Size: 40,105
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 11
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 220,315
+  #Size: 82,96
+  #Descr: conveyor1
+  #Cursor: 0
+  #PBmpFile: 0,conveyor_red.png
+  #PBmpFile: 1,conveyor_grey.bmp
+  #PBmpFile: 2,conveyor_green.bmp
+  #TabOrder: 12
+  #Status: 0,6,13,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1
+  #Status: 1,18,6,0
+  #Status: 2,18,6,1
+  #CycleTime: 0,0
+  #CycleTime: 1,0
+  #CycleTime: 2,0
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 320,170
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T1
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 13
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 375,170
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T2
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 14
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 430,170
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T3
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 15
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 430,225
+  #Size: 50,25
+  #Cursor: 0
+  #Label: Finish
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 16
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 320,225
+  #Size: 50,25
+  #Cursor: 0
+  #Label: On
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 17
+  #Access: 0
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 365,150
+  #Size: 70,17
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,9,0000
+  #Label: Choose Tool
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 375,205
+  #Size: 45,17
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,9,0000
+  #Label: Operate
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 375,225
+  #Size: 50,25
+  #Cursor: 0
+  #Label: Off
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 18
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 320,330
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T2
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 19
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 375,330
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T3
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 20
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 430,330
+  #Size: 50,25
+  #Cursor: 0
+  #Label: T4
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 21
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 430,385
+  #Size: 50,25
+  #Cursor: 0
+  #Label: Finish
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 22
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 320,385
+  #Size: 50,25
+  #Cursor: 0
+  #Label: On
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 23
+  #Access: 0
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 365,310
+  #Size: 70,17
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,9,0000
+  #Label: Choose Tool
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 375,365
+  #Size: 45,17
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,9,0000
+  #Label: Operate
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 375,385
+  #Size: 50,25
+  #Cursor: 0
+  #Label: Off
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 24
+  #Access: 0
+#EndObj
+#Object: HistoricalView
+  #ID: 0
+  #Pos: 5,465
+  #Size: 205,70
+  #DateWidth: 100,"Date"
+  #TimeWidth: 100,"Time"
+  #TimeRange: 3600
+  #RowOptions: 1,1,0,1,0
+  #PageType: 0
+  #Gates: 0
+  #showServerButton: 0
+  #ShowCfgButton: 0
+  #ShowPrintButton: 0
+  #ShowSaveCSVButton: 0
+  #WndBkgndColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #DefaultServer: Local
+#EndObj
+#Object: St_Bar
+  #ID: 0
+  #Pos: 35,125
+  #Size: 175,20
+  #Cursor: 0
+  #BkColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #Align: 37
+  #Frame: 2
+  #Status: 0,0,0,clBtnFace,0,0,0,Automatic,-1
+  #Status: 0,0,0,clBtnFace,0,0,0,Mantenence,-1
+  #Status: 0,0,0,clBtnFace,0,0,0,Manual,-1
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,165
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Automatic
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 25
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,195
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Maintenance
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 26
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,225
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Manual
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 27
+  #Access: 0
+#EndObj
+#Object: St_Bar
+  #ID: 0
+  #Pos: 130,195
+  #Size: 80,20
+  #Cursor: 0
+  #BkColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #Align: 37
+  #Frame: 2
+  #Status: 0,0,0,clLime,8,6,1,T1,-1
+  #Status: 0,0,0,clRed,7,6,1,Changing Tool,-1
+  #Status: 0,0,0,clLime,9,6,1,T2,-1
+  #Status: 0,0,0,clLime,10,6,1,T3,-1
+  #Status: 0,0,0,clBtnFace,7,6,0,Wating ,-1
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 75,340
+  #Size: 105,40
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 28
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 35,305
+  #Size: 95,115
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 29
+  #Access: 0
+#EndObj
+#Object: Frame
+  #ID: 0
+  #Pos: 175,310
+  #Size: 40,105
+  #BkColor: clWindowFrame
+  #Style: 2
+  #TabOrder: 30
+  #Access: 0
+#EndObj
+#Object: St_Bar
+  #ID: 0
+  #Pos: 35,280
+  #Size: 175,20
+  #Cursor: 0
+  #BkColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #Align: 37
+  #Frame: 2
+  #Status: 0,0,0,clBtnFace,0,0,0,Automatic,-1
+  #Status: 0,0,0,clBtnFace,0,0,0,Manual,-1
+  #Status: 0,0,0,clBtnFace,0,0,0,Mantenence,-1
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,320
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Automatic
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 31
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,350
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Maintenance
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 32
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 45,380
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Manual
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 33
+  #Access: 0
+#EndObj
+#Object: St_Bar
+  #ID: 0
+  #Pos: 130,350
+  #Size: 80,20
+  #Cursor: 0
+  #BkColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #Align: 37
+  #Frame: 2
+  #Status: 0,0,0,clLime,12,6,1,T2,-1
+  #Status: 0,0,0,clRed,11,6,1,Changing Tool,-1
+  #Status: 0,0,0,clLime,13,6,1,T3,-1
+  #Status: 0,0,0,clLime,14,6,1,T4,-1
+  #Status: 0,0,0,clBtnFace,11,6,0,Wating ,-1
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 250,350
+  #Size: 21,21
+  #Descr: sensor1
+  #Cursor: 0
+  #PBmpFile: 0,workpiece_blue.png
+  #TabOrder: 34
+  #CycleTime: 0,0
+  #Show: 3,6,1
+  #Access: 0
+#EndObj
+#Object: Bitmap
+  #ID: 0
+  #Pos: 250,425
+  #Size: 21,21
+  #Descr: sensor1
+  #Cursor: 0
+  #PBmpFile: 0,workpiece_blue.png
+  #TabOrder: 35
+  #CycleTime: 0,0
+  #Show: 4,6,1
+  #Access: 0
+#EndObj

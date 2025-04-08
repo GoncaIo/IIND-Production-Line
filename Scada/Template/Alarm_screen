@@ -1,0 +1,51 @@
+#Version: 0x030217
+#Access: 0
+#Pos: 0,0
+#Size: 637,444
+#BkColor: clBtnFace
+#Gates: 0
+#Style: Standard
+#StayOnTop: 0
+#Object: OnlineView
+  #ID: 0
+  #Pos: 10,55
+  #Size: 600,365
+  #Class1: -1
+  #Class2: 
+  #AlarmsOrEvents: 1
+  #ShowSortButton: 1
+  #ShowFilterButton: 1
+  #ShowConfirmButton: 1
+  #ShowConfirmAllButton: 1
+  #ShowExcludeChkBox: 1
+  #WndBkgndColor: clBtnFace
+  #AlarmListBkgndColor: clWhite
+  #Font: Segoe UI,9,0000
+  #UseCustomColumns: 0
+  #Columns: "Active","Attivo","50","Ack","Conferma","50","Message","Messaggio","350","Date","Data","80","Time","Ora","80","Class 1","Classe_1","80","Class 2","Classe_2","80","To Ack","A_Ritenuta","80","Excluded","Escluso","80"
+#EndObj
+#Object: Label
+  #ID: 0
+  #Pos: 30,15
+  #Size: 110,27
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,16,0000
+  #Label: Alarms
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 530,20
+  #Size: 75,25
+  #Cursor: 0
+  #Label: Close
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 0
+  #Access: 0
+  #OnClick: Close
+#EndObj

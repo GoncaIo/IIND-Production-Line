@@ -1,0 +1,7 @@
+End of Week Report
+
+Current status of Conveyor 1 ->  {GetDigGateValue("1", 0)}
+Current status of Conveyor 2 ->  {GetDigGateValue("1", 1)}
+Current status of Conveyor 3 ->  {GetDigGateValue("1", 2)}
+
+

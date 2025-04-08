@@ -1,0 +1,52 @@
+#Version: 0x030217
+#Access: 0
+#Pos: 0,0
+#Size: 637,444
+#BkColor: clBtnFace
+#Gates: 0
+#Style: Standard
+#StayOnTop: 0
+#Object: Label
+  #ID: 0
+  #Pos: 30,15
+  #Size: 190,27
+  #BkColor: clBtnFace
+  #Cursor: 0
+  #TxtColor: clWindowText
+  #Font: Segoe UI,16,0000
+  #Label: Alarm History
+  #Align: 32
+  #Frame: 1
+  #Access: 0
+#EndObj
+#Object: HistView
+  #ID: 0
+  #Pos: 10,55
+  #Size: 600,375
+  #Class1: -1
+  #Class2: 
+  #TimeRange: 3600
+  #PageType: 0
+  #showServerButton: 0
+  #ShowCfgButton: 1
+  #ShowFilterButton: 1
+  #ShowPrintButton: 1
+  #ShowSaveCSVButton: 1
+  #WndBkgndColor: clBtnFace
+  #Font: Segoe UI,9,0000
+  #DefaultServer: Local
+  #UseCustomColumns: 0
+  #Columns: "Message","Messaggio","350","Start Date","Data_di_inizio","80","Start Time","Ora_di_inizio","80","End Date","Data_di_fine","80","End Time","Ora_di_fine","80","Class 1","Classe_1","80","Class 2","Classe_2","80"
+#EndObj
+#Object: Button
+  #ID: 0
+  #Pos: 535,20
+  #Size: 75,25
+  #Cursor: 0
+  #Label: close
+  #Font: Segoe UI,9,0000
+  #FunctionKey: -1
+  #TabOrder: 0
+  #Access: 0
+  #OnClick: Close
+#EndObj

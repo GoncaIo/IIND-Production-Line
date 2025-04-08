@@ -1,0 +1,7 @@
+Function Void Toggle_Conveyor1()
+  int current_state;
+  current_state = GetNumGateValue("1",1);
+  current_state = BitXor(current_state, 1);
+  SetNumGateValue("1",1,current_state);
+End
+
