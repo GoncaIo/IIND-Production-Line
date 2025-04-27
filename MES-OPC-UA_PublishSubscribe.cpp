@@ -24,10 +24,11 @@ int main() {
     UA_ClientConfig_setDefault(UA_Client_getConfig(client));
     
     // Server endpoint URL - using 127.0.0.1 since it worked
-    const char* serverUrl = "opc.tcp://127.0.0.1:4840";
+    const char* serverUrl = "opc.tcp://192.168.1.244:4840";
     
     // Connect to the server
-    std::cout << "Attempting to connect to: " << serverUrl << std::endl;
+    UA_EndpointDescription* endpointArray = NULL;
+    size_t endpointArraySize = 0;
     UA_StatusCode retval = UA_Client_connect(client, serverUrl);
 
     if (retval != UA_STATUSCODE_GOOD) {
@@ -40,19 +41,23 @@ int main() {
 
     try {
         // Define the node ids for our variables (same as in Python code)
-        UA_NodeId warehouse1NodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.NUM_PIECES_WAREHOUSE1"));
-        UA_NodeId warehouse2NodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.NUM_PIECES_WAREHOUSE2"));
-        UA_NodeId warehouseOutNodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.WAREHOUSE_OUT_1"));
+        //UA_NodeId warehouse1NodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.NUM_PIECES_WAREHOUSE1"));
+        //UA_NodeId warehouse2NodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.NUM_PIECES_WAREHOUSE2"));
+        //UA_NodeId warehouseOutNodeId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.GVL.WAREHOUSE_OUT_1"));
+        UA_NodeId wantedPieceId = UA_NODEID_STRING(4, const_cast<char*>("|var|CODESYS Control Win V3 x64.Application.PLC_PRG.int1"));
         while (running) {
             // Variables to store the values
-            UA_Int16 value1 = 0;
-            UA_Int16 value2 = 0;
-            UA_UInt16 value3 = 0;
+            //UA_Int16 value1 = 0;
+            //UA_Int16 value2 = 0;
+            //UA_UInt16 value3 = 0;
+
+            UA_UInt16 onePiece = 0;
             
             // Initialize variant for reading
             UA_Variant variant;
             UA_Variant_init(&variant);
             
+            /*
             // Read Warehouse1
             retval = UA_Client_readValueAttribute(client, warehouse1NodeId, &variant);
             if (retval == UA_STATUSCODE_GOOD && UA_Variant_hasScalarType(&variant, &UA_TYPES[UA_TYPES_INT16])) {
@@ -85,12 +90,20 @@ int main() {
                 std::cerr << "Error reading WarehouseOut: " << retval << std::endl;
             }
             UA_Variant_clear(&variant);
-            
+            */
+
+
+           retval = UA_Client_readValueAttribute(client, wantedPieceId, &variant);
+           if (retval == UA_STATUSCODE_GOOD && UA_Variant_hasScalarType(&variant, &UA_TYPES[UA_TYPES_UINT16])){
+            onePiece = *(UA_Int16*)variant.data;
+           }
+
             std::cout << std::endl;
             
             // Wait for 1 second
             std::this_thread::sleep_for(std::chrono::seconds(1));
             
+            /*
             // Set new values
             // For Warehouse1
             UA_Int16 newValue1 = value1 + 1;
@@ -116,6 +129,14 @@ int main() {
             if (retval != UA_STATUSCODE_GOOD) {
                 std::cerr << "Error writing WarehouseOut: " << retval << std::endl;
             }
+            */
+
+        
+           UA_UInt16 newPiece;
+           std::cin >> newPiece;
+           std::cout << "New piece value is " << newPiece << '\n';
+           UA_Variant_setScalar(&variant, &newPiece, &UA_TYPES[UA_TYPES_UINT16]);
+           retval = UA_Client_writeValueAttribute(client, wantedPieceId, &variant);
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
