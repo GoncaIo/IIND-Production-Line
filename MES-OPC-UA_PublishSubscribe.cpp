@@ -24,7 +24,7 @@ int main() {
     UA_ClientConfig_setDefault(UA_Client_getConfig(client));
     
     // Server endpoint URL - using 127.0.0.1 since it worked
-    const char* serverUrl = "opc.tcp://192.168.1.244:4840";
+    const char* serverUrl = "opc.tcp://127.0.0.1:4840";
     
     // Connect to the server
     UA_EndpointDescription* endpointArray = NULL;
