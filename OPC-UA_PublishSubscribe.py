@@ -84,6 +84,26 @@ for filename in os.listdir(orders_folder):
                 order_queue.append((order_type, quantity))
 
 # --- OPC UA server connection and reading ---
+def connect_client():
+
+    server_url = "opc.tcp://127.0.0.1:4840"
+    
+    client = Client(server_url)
+
+    client.connect()
+
+    return client
+
+def get_node(client, nodeid):
+    node = client.get_node(nodeid)
+    return node
+
+def get_value(node):
+    return node.get_value()
+
+def write_value(node, value, tp = ua.VariantType.Int16):
+    node.set_value(ua.Variant(value,tp))
+    
 def read_codesys_variables():
     server_url = "opc.tcp://127.0.0.1:4840"
     client = Client(server_url)
@@ -136,4 +156,11 @@ def read_codesys_variables():
 
 # --- Main execution ---
 if __name__ == "__main__":
-    read_codesys_variables()
+    queue = [2,3]
+    client = connect_client()
+    wanted_node = get_node(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.wanted_piece"
+    
+
+
+
+    
