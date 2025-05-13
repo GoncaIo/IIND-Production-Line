@@ -158,8 +158,8 @@ def read_codesys_variables():
 if __name__ == "__main__":
     queue = [2,3]
     client = connect_client()
-    wanted_node = get_node(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.wanted_piece"
-    
+    wanted_node = get_node(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.wanted_piece")
+    write_value(wanted_node,3)
 
 
 
