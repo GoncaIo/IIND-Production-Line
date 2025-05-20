@@ -1,0 +1,13 @@
+{
+  "name": "Cliente Exemplo",
+  "NIF": 123456789,
+  "OrderID": 1,
+  "orders": [
+    {
+      "type": 4,
+      "quantity": 1,
+      "DDate": 3,
+      "Penalty": 10
+    }
+  ]
+}
