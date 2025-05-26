@@ -81,16 +81,15 @@ def read_codesys_variables():
         trans_m_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_M")
         trans_t_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_T")
         ca_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CA_entry_piece")
+        cx_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CX_entry_piece")
         cell_free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_free")
 
         CELL_CA = 0
         CELL_C1 = 4
 
-        order = None
         WH1 = [0] * 32
         WH2 = [0] * 32
 
-        # Apenas 1 pedido, pegar o primeiro do queue (se existir)
         if order_queue:
             order_type, quantity = order_queue.popleft()
             piece = next((p for p in Piece if simulate_transformation_path(p) == order_type), None)
@@ -100,17 +99,15 @@ def read_codesys_variables():
 
             print(f"Processing order: type={order_type}, quantity={quantity}")
 
-            # Envia peça inicial para CA enquanto CA estiver livre
-            while True: 
+            # Enviar peça inicial para CA enquanto CA estiver livre
+            while True:
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)):
                     if cell_free[CELL_CA] == 1:
                         ca_entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
                         print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
                     else:
-                        # CA ficou ocupado, limpa o pedido
                         ca_entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
-                        # Adiciona a peça ao WH1 antes de sair
                         try:
                             index = WH1.index(0)
                             WH1[index] = piece.Initial_Piece
@@ -122,12 +119,11 @@ def read_codesys_variables():
                         break
                 time.sleep(0.5)
 
-            # Esperar C1 estar livre
+            # Esperar C1 estar livre e peça disponível em WH1
             while True:
                 cell_free = cell_free_node.get_value()
                 piece_available = piece.Initial_Piece in WH1
                 if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1 and piece_available:
-                    # Retira a peça do WH1
                     index_to_remove = WH1.index(piece.Initial_Piece)
                     WH1[index_to_remove] = 0
                     print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
@@ -138,11 +134,9 @@ def read_codesys_variables():
                     print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
 
-
             entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
             num_node.set_value(ua.Variant(len(piece.TRANSFORM), ua.VariantType.Int16))
 
-            # Reset inicial piece
             time.sleep(1)
             entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
 
@@ -163,7 +157,7 @@ def read_codesys_variables():
 
             print(f"Sent recipe: P{order_type} → initial {piece.Initial_Piece}, {len(piece.TRANSFORM)} steps")
 
-            # Esperar que C1 fique ocupado (False) e depois livre (True) — transformação em progresso e depois concluída
+            # Esperar C1 processar (0 ocupado, depois 1 livre)
             while True:
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 0:
@@ -174,7 +168,6 @@ def read_codesys_variables():
             while True:
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1:
-                    # A transformação terminou, armazenar peça resultante em WH2
                     result_piece = simulate_transformation_path(piece)
                     if result_piece is None:
                         print("Error: invalid transformation path for piece")
@@ -183,6 +176,13 @@ def read_codesys_variables():
                             index = WH2.index(0)
                             WH2[index] = result_piece
                             print(f"Stored transformed piece {result_piece} in WH2 at position {index}")
+
+                            # Extrair peça final encomendada para CX_entry_piece
+                            if result_piece == order_type:
+                                cx_entry_node.set_value(ua.Variant(result_piece, ua.VariantType.Int16))
+                                print(f"Extracted final piece {result_piece} from WH2 to CX_entry_piece")
+                                WH2[index] = 0
+
                         except ValueError:
                             print("Warning: WH2 is full, cannot store more pieces")
                     break
@@ -199,6 +199,5 @@ def read_codesys_variables():
         client.disconnect()
         sys.exit(1)
 
-# --- Main execution ---
 if __name__ == "__main__":
     read_codesys_variables()
