@@ -80,7 +80,17 @@ def read_codesys_variables():
         num_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_steps")
         trans_m_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_M")
         trans_t_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_T")
-        free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_free")
+        ca_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CA_entry_piece")
+        cell_free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_free")
+
+        # Índices das células
+        CELL_CA = 0
+        CELL_C1 = 4
+
+        # Inicializa WH1 com 32 espaços
+        WH1 = [0] * 32
+
+        sent_to_ca = False
 
         while order_queue:
             order_type, quantity = order_queue.popleft()
@@ -91,16 +101,54 @@ def read_codesys_variables():
                 print(f"No defined transformation path for piece type {order_type}")
                 continue
 
+            if not sent_to_ca:
+                # 1. Produzir peça inicial na CA
+                while True:
+                    cell_free = cell_free_node.get_value()
+                    if isinstance(cell_free, (list, tuple)) and cell_free[CELL_CA] == 1:
+                        ca_entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
+                        print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
+                        break
+                    else:
+                        ca_entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
+                        print("CA is busy, sending 0 to CA_entry_piece")
+                    time.sleep(0.5)
+
+                # 2. Esperar que CA fique livre novamente → peça já saiu
+                while True:
+                    cell_free = cell_free_node.get_value()
+                    if isinstance(cell_free, (list, tuple)) and cell_free[CELL_CA] == 1:
+                        try:
+                            index = WH1.index(0)
+                            WH1[index] = piece.Initial_Piece
+                            print(f"Stored piece {piece.Initial_Piece} in WH1 at position {index}")
+                        except ValueError:
+                            print("Warning: WH1 is full, cannot store more pieces")
+                        break
+                    print("Waiting for CA to be free again before storing piece...")
+                    time.sleep(0.5)
+
+                sent_to_ca = True  # só envia uma vez para CA
+
+            # 3. Esperar que C1 esteja livre E que a peça inicial esteja no WH1
             while True:
-                free = free_node.get_value()
-                if free:
+                cell_free = cell_free_node.get_value()
+                c1_free = isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1
+                piece_available = piece.Initial_Piece in WH1
+                if c1_free and piece_available:
                     break
-                print("Waiting for C1 to be free...")
+                if not c1_free:
+                    print("Waiting for C1 to be free...")
+                if not piece_available:
+                    print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
 
-            
-            #free_node.set_value(ua.Variant(False, ua.VariantType.Boolean))
+            # 4. Remover peça do WH1
+            index_to_remove = WH1.index(piece.Initial_Piece)
+            WH1[index_to_remove] = 0
+            print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
 
+            # 5. Enviar receita para C1
             entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
             num_node.set_value(ua.Variant(len(piece.TRANSFORM), ua.VariantType.Int16))
 
@@ -116,10 +164,11 @@ def read_codesys_variables():
             times_ms = [t * 1000 for t in times]
 
             trans_m_node.set_value(ua.Variant(tools, ua.VariantType.Int16))
-            print("TIMES",times_ms)
+            print("TIMES", times_ms)
             trans_t_node.set_value(ua.Variant(times_ms, ua.VariantType.Int64))
 
             print(f"Sent recipe: P{order_type} → initial {piece.Initial_Piece}, {len(piece.TRANSFORM)} steps")
+
 
     except KeyboardInterrupt:
         print("\nInterrupted by user. Disconnecting client...")
