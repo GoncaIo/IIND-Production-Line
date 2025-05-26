@@ -83,74 +83,68 @@ def read_codesys_variables():
         ca_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CA_entry_piece")
         cell_free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_free")
 
-        # Índices das células
         CELL_CA = 0
         CELL_C1 = 4
 
-        # Inicializa WH1 com 32 espaços
+        order = None
         WH1 = [0] * 32
+        WH2 = [0] * 32
 
-        sent_to_ca = False
-
-        while order_queue:
+        # Apenas 1 pedido, pegar o primeiro do queue (se existir)
+        if order_queue:
             order_type, quantity = order_queue.popleft()
-            print(f"Processing order: type={order_type}, quantity={quantity}")
-
             piece = next((p for p in Piece if simulate_transformation_path(p) == order_type), None)
             if not piece:
                 print(f"No defined transformation path for piece type {order_type}")
-                continue
+                return
 
-            if not sent_to_ca:
-                # 1. Produzir peça inicial na CA
-                while True:
-                    cell_free = cell_free_node.get_value()
-                    if isinstance(cell_free, (list, tuple)) and cell_free[CELL_CA] == 1:
+            print(f"Processing order: type={order_type}, quantity={quantity}")
+
+            # Envia peça inicial para CA enquanto CA estiver livre
+            while True: 
+                cell_free = cell_free_node.get_value()
+                if isinstance(cell_free, (list, tuple)):
+                    if cell_free[CELL_CA] == 1:
                         ca_entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
                         print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
-                        break
                     else:
+                        # CA ficou ocupado, limpa o pedido
                         ca_entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
-                        print("CA is busy, sending 0 to CA_entry_piece")
-                    time.sleep(0.5)
-
-                # 2. Esperar que CA fique livre novamente → peça já saiu
-                while True:
-                    cell_free = cell_free_node.get_value()
-                    if isinstance(cell_free, (list, tuple)) and cell_free[CELL_CA] == 1:
+                        # Adiciona a peça ao WH1 antes de sair
                         try:
                             index = WH1.index(0)
                             WH1[index] = piece.Initial_Piece
-                            print(f"Stored piece {piece.Initial_Piece} in WH1 at position {index}")
+                            print(f"Stored piece {piece.Initial_Piece} in WH1 at position {index} after clearing CA entry")
+                            time.sleep(1)
                         except ValueError:
                             print("Warning: WH1 is full, cannot store more pieces")
+                        print("CA is busy now, sent 0 to CA_entry_piece")
                         break
-                    print("Waiting for CA to be free again before storing piece...")
-                    time.sleep(0.5)
+                time.sleep(0.5)
 
-                sent_to_ca = True  # só envia uma vez para CA
-
-            # 3. Esperar que C1 esteja livre E que a peça inicial esteja no WH1
+            # Esperar C1 estar livre
             while True:
                 cell_free = cell_free_node.get_value()
-                c1_free = isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1
                 piece_available = piece.Initial_Piece in WH1
-                if c1_free and piece_available:
+                if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1 and piece_available:
+                    # Retira a peça do WH1
+                    index_to_remove = WH1.index(piece.Initial_Piece)
+                    WH1[index_to_remove] = 0
+                    print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
                     break
-                if not c1_free:
+                if not (isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1):
                     print("Waiting for C1 to be free...")
                 if not piece_available:
                     print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
 
-            # 4. Remover peça do WH1
-            index_to_remove = WH1.index(piece.Initial_Piece)
-            WH1[index_to_remove] = 0
-            print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
 
-            # 5. Enviar receita para C1
             entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
             num_node.set_value(ua.Variant(len(piece.TRANSFORM), ua.VariantType.Int16))
+
+            # Reset inicial piece
+            time.sleep(1)
+            entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
 
             MAX_TRANS = 6
             tools = piece.TRANSFORM[:MAX_TRANS]
@@ -169,6 +163,30 @@ def read_codesys_variables():
 
             print(f"Sent recipe: P{order_type} → initial {piece.Initial_Piece}, {len(piece.TRANSFORM)} steps")
 
+            # Esperar que C1 fique ocupado (False) e depois livre (True) — transformação em progresso e depois concluída
+            while True:
+                cell_free = cell_free_node.get_value()
+                if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 0:
+                    print("C1 is busy processing...")
+                    break
+                time.sleep(0.5)
+
+            while True:
+                cell_free = cell_free_node.get_value()
+                if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1:
+                    # A transformação terminou, armazenar peça resultante em WH2
+                    result_piece = simulate_transformation_path(piece)
+                    if result_piece is None:
+                        print("Error: invalid transformation path for piece")
+                    else:
+                        try:
+                            index = WH2.index(0)
+                            WH2[index] = result_piece
+                            print(f"Stored transformed piece {result_piece} in WH2 at position {index}")
+                        except ValueError:
+                            print("Warning: WH2 is full, cannot store more pieces")
+                    break
+                time.sleep(0.5)
 
     except KeyboardInterrupt:
         print("\nInterrupted by user. Disconnecting client...")
