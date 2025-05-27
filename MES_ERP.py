@@ -77,12 +77,12 @@ def read_codesys_variables():
         print(f"Connected to OPC UA Server at {server_url}")
 
         entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_entry_piece")
-        num_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_steps")
         trans_m_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_M")
         trans_t_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_T")
         ca_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CA_entry_piece")
         cx_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CX_entry_piece")
         cell_free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_free")
+        cell_steps_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_steps")
 
         CELL_CA = 0
         CELL_C1 = 4
@@ -123,39 +123,61 @@ def read_codesys_variables():
             while True:
                 cell_free = cell_free_node.get_value()
                 piece_available = piece.Initial_Piece in WH1
-                if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1 and piece_available:
-                    index_to_remove = WH1.index(piece.Initial_Piece)
-                    WH1[index_to_remove] = 0
-                    print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
-                    break
+                if isinstance(cell_free, (list, tuple)):
+
+                    # Aqui: se C1 estiver ocupado, peça a 0
+                    if cell_free[CELL_C1] == 0:
+                        print("C1 is busy processing...")
+                        piece = 0  # Redefinir piece para 0 quando C1 ocupado
+
+                    # Se C1 estiver livre e peça disponível, sair do loop
+                    if cell_free[CELL_C1] == 1 and piece_available:
+                        index_to_remove = WH1.index(piece.Initial_Piece)
+                        WH1[index_to_remove] = 0
+                        print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
+                        break
+
                 if not (isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1):
                     print("Waiting for C1 to be free...")
                 if not piece_available:
                     print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
 
-            entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
-            num_node.set_value(ua.Variant(len(piece.TRANSFORM), ua.VariantType.Int16))
+            # Ler o vetor Cell_steps inteiro (ou ler o valor atual em CELL_C1)
+            cell_steps = cell_steps_node.get_value()
+            if not isinstance(cell_steps, (list, tuple)):
+                print("Error reading Cell_steps array")
+                cell_steps = [0]*21  # fallback
 
-            time.sleep(1)
-            entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
+            # Atualizar passo do C1 para o número de passos da peça
+            cell_steps = list(cell_steps)  # garantir mutável
+            cell_steps[CELL_C1] = len(piece.TRANSFORM) if piece != 0 else 0  # evita erro se piece for 0
 
-            MAX_TRANS = 6
-            tools = piece.TRANSFORM[:MAX_TRANS]
-            times = piece.TIMES[:MAX_TRANS]
+            # Escrever vetor atualizado para PLC
+            cell_steps_node.set_value(ua.Variant(cell_steps, ua.VariantType.Int16))
 
-            while len(tools) < MAX_TRANS:
-                tools.append(0)
-            while len(times) < MAX_TRANS:
-                times.append(0)
+            # Enviar entrada e transformações para C1, apenas se piece for diferente de 0
+            if piece != 0:
+                entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
 
-            times_ms = [t * 1000 for t in times]
+                MAX_TRANS = 6
+                tools = piece.TRANSFORM[:MAX_TRANS]
+                times = piece.TIMES[:MAX_TRANS]
 
-            trans_m_node.set_value(ua.Variant(tools, ua.VariantType.Int16))
-            print("TIMES", times_ms)
-            trans_t_node.set_value(ua.Variant(times_ms, ua.VariantType.Int64))
+                while len(tools) < MAX_TRANS:
+                    tools.append(0)
+                while len(times) < MAX_TRANS:
+                    times.append(0)
 
-            print(f"Sent recipe: P{order_type} → initial {piece.Initial_Piece}, {len(piece.TRANSFORM)} steps")
+                times_ms = [t * 1000 for t in times]
+
+                trans_m_node.set_value(ua.Variant(tools, ua.VariantType.Int16))
+                print("TIMES", times_ms)
+                trans_t_node.set_value(ua.Variant(times_ms, ua.VariantType.Int64))
+
+                print(f"Sent recipe: P{order_type} → initial {piece.Initial_Piece}, {len(piece.TRANSFORM)} steps")
+            else:
+                print("No active piece to send recipe for (piece = 0)")
 
             # Esperar C1 processar (0 ocupado, depois 1 livre)
             while True:
@@ -168,9 +190,9 @@ def read_codesys_variables():
             while True:
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1:
-                    result_piece = simulate_transformation_path(piece)
+                    result_piece = simulate_transformation_path(piece) if piece != 0 else None
                     if result_piece is None:
-                        print("Error: invalid transformation path for piece")
+                        print("Error: invalid transformation path for piece or no piece to process")
                     else:
                         try:
                             index = WH2.index(0)

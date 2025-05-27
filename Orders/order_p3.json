@@ -1,13 +1,19 @@
 {
   "name": "Cliente Exemplo",
   "NIF": 123456789,
-  "OrderID": 1,
+  "OrderID": 42,
   "orders": [
     {
       "type": 3,
-      "quantity": 1,
-      "DDate": 3,
-      "Penalty": 10
+      "quantity": 100,
+      "DDate": 15,
+      "Penalty": 5.0
+    },
+    {
+      "type": 4,
+      "quantity": 50,
+      "DDate": 10,
+      "Penalty": 2.5
     }
   ]
 }

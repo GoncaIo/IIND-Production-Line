@@ -21,6 +21,9 @@
     <TypeArray name="T_ARRAY__0__20__OF_BOOL" size="21" nativesize="21" typeclass="Array" iecname="ARRAY [0..20] OF BOOL" basetype="T_BOOL">
       <ArrayDim minrange="0" maxrange="20" />
     </TypeArray>
+    <TypeArray name="T_ARRAY__0__20__OF_INT" size="42" nativesize="42" typeclass="Array" iecname="ARRAY [0..20] OF INT" basetype="T_INT">
+      <ArrayDim minrange="0" maxrange="20" />
+    </TypeArray>
     <TypeArray name="T_ARRAY__0__2__OF_INT" size="6" nativesize="6" typeclass="Array" iecname="ARRAY [0..2] OF INT" basetype="T_INT">
       <ArrayDim minrange="0" maxrange="2" />
     </TypeArray>
@@ -38,27 +41,21 @@
     <Node name="Application">
       <Node name="GVL">
         <Node name="C1_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C1_steps" type="T_INT" access="ReadWrite" />
         <Node name="C1_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C1_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="C2_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C2_steps" type="T_INT" access="ReadWrite" />
         <Node name="C2_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C2_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="C3_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C3_steps" type="T_INT" access="ReadWrite" />
         <Node name="C3_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C3_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="C4_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C4_steps" type="T_INT" access="ReadWrite" />
         <Node name="C4_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C4_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="C5_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C5_steps" type="T_INT" access="ReadWrite" />
         <Node name="C5_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C5_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="C6_entry_piece" type="T_INT" access="ReadWrite" />
-        <Node name="C6_steps" type="T_INT" access="ReadWrite" />
         <Node name="C6_transformations_M" type="T_ARRAY__0__5__OF_INT" access="ReadWrite" />
         <Node name="C6_transformations_T" type="T_ARRAY__0__5__OF_TIME" access="ReadWrite" />
         <Node name="CA_entry_piece" type="T_INT" access="ReadWrite" />
@@ -66,6 +63,7 @@
         <Node name="CC_entry_piece" type="T_INT" access="ReadWrite" />
         <Node name="CD_entry_piece" type="T_INT" access="ReadWrite" />
         <Node name="Cell_free" type="T_ARRAY__0__20__OF_BOOL" access="ReadWrite" />
+        <Node name="Cell_steps" type="T_ARRAY__0__20__OF_INT" access="ReadWrite" />
         <Node name="CW_entry_piece" type="T_INT" access="ReadWrite" />
         <Node name="CX_entry_piece" type="T_INT" access="ReadWrite" />
         <Node name="CY_entry_piece" type="T_INT" access="ReadWrite" />

@@ -4,3 +4,4 @@
 *.bootinfo
 *.bootinfo_guids
 *.compileinfo
+*.vscode
