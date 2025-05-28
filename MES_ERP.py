@@ -106,7 +106,7 @@ def read_codesys_variables():
                 if isinstance(cell_free, (list, tuple)):
                     if cell_free[CELL_CA] == 1:
                         entry_list = entry_node.get_value()
-                        entry_list[0] = piece.Initial_Piece
+                        entry_list[1] = piece.Initial_Piece
                         entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
                         print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
                     else:
