@@ -76,21 +76,22 @@ def read_codesys_variables():
         client.connect()
         print(f"Connected to OPC UA Server at {server_url}")
 
-        entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_entry_piece")
+        entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Entry_pieces")
         trans_m_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_M")
         trans_t_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.C1_transformations_T")
-        ca_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CA_entry_piece")
-        cx_entry_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.CX_entry_piece")
         cell_free_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_free")
         cell_steps_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Cell_steps")
 
+        entry_list = entry_node.get_value()
+
         CELL_CA = 0
         CELL_C1 = 4
+        CELL_CX = 11
 
         WH1 = [0] * 32
         WH2 = [0] * 32
 
-        if order_queue:
+        while len(order_queue) > 0:
             order_type, quantity = order_queue.popleft()
             piece = next((p for p in Piece if simulate_transformation_path(p) == order_type), None)
             if not piece:
@@ -104,10 +105,13 @@ def read_codesys_variables():
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)):
                     if cell_free[CELL_CA] == 1:
-                        ca_entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
+                        entry_list = entry_node.get_value()
+                        entry_list[0] = piece.Initial_Piece
+                        entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
                         print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
                     else:
-                        ca_entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
+                        ##entry_list[0] = 0 TALVEZ DESCOMENTAR
+                        ##entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
                         try:
                             index = WH1.index(0)
                             WH1[index] = piece.Initial_Piece
@@ -158,7 +162,9 @@ def read_codesys_variables():
 
             # Enviar entrada e transformações para C1, apenas se piece for diferente de 0
             if piece != 0:
-                entry_node.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
+                entry_list = entry_node.get_value()
+                entry_list[4] = piece.Initial_Piece
+                entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
 
                 MAX_TRANS = 6
                 tools = piece.TRANSFORM[:MAX_TRANS]
@@ -187,6 +193,8 @@ def read_codesys_variables():
                     break
                 time.sleep(0.5)
 
+            ##entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
+
             while True:
                 cell_free = cell_free_node.get_value()
                 if isinstance(cell_free, (list, tuple)) and cell_free[CELL_C1] == 1:
@@ -201,7 +209,9 @@ def read_codesys_variables():
 
                             # Extrair peça final encomendada para CX_entry_piece
                             if result_piece == order_type:
-                                cx_entry_node.set_value(ua.Variant(result_piece, ua.VariantType.Int16))
+                                entry_list = entry_node.get_value()
+                                entry_list[11] = result_piece
+                                entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
                                 print(f"Extracted final piece {result_piece} from WH2 to CX_entry_piece")
                                 WH2[index] = 0
 
@@ -209,6 +219,8 @@ def read_codesys_variables():
                             print("Warning: WH2 is full, cannot store more pieces")
                     break
                 time.sleep(0.5)
+
+                
 
     except KeyboardInterrupt:
         print("\nInterrupted by user. Disconnecting client...")

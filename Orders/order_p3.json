@@ -4,7 +4,7 @@
   "OrderID": 42,
   "orders": [
     {
-      "type": 3,
+      "type": 4,
       "quantity": 100,
       "DDate": 15,
       "Penalty": 5.0
@@ -16,4 +16,4 @@
       "Penalty": 2.5
     }
   ]
-}
+}	
