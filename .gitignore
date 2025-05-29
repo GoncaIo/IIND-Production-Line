@@ -5,3 +5,4 @@
 *.bootinfo_guids
 *.compileinfo
 *.vscode
+.atalho*
