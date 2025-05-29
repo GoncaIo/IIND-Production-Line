@@ -233,8 +233,14 @@ def read_codesys_variables():
         WH1 = [0] * 32
         WH2 = [0] * 32
 
-        line1 = ProdLine(entry_node, trans_m_node_1, trans_t_node_1, cell_free_node, cell_steps_node, [1,2,3], [2,3,4], 4)
-        line2 = ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [2,3,4], [3,4,5], 5)
+        prodLines=[
+            ProdLine(entry_node, trans_m_node_1, trans_t_node_1, cell_free_node, cell_steps_node, [1,2,3], [2,3,4], 4),
+            ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [2,3,4], [3,4,5], 5),
+            ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [3,4,5], [4,5,6], 6),
+            ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [4,5,6], [5,6,1], 7),
+            ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [5,6,1], [6,1,2], 8),
+            ProdLine(entry_node, trans_m_node_2, trans_t_node_2, cell_free_node, cell_steps_node, [6,1,2], [1,2,3], 9)
+        ]
 
         while len(order_queue) > 0:
             order_type, quantity = order_queue.popleft()
@@ -292,13 +298,12 @@ def read_codesys_variables():
                     print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
 
-            while not line2.start(piece):
+            while not prodLines[0].start(piece):
                 pass
 
             result_piece = None
-            while(line2.busy):
-                result_piece = line2.tick()
-            print(result_piece)
+            while(prodLines[0].busy):
+                result_piece = prodLines[0].tick()
             
 
             ##entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
