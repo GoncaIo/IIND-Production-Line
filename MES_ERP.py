@@ -15,6 +15,10 @@ class Pieces:
     Initial_Piece: int
     TRANSFORM: List[int] = field(default_factory=list)
     TIMES: List[int] = field(default_factory=list)  # In seconds
+    wip = False
+
+WH1 = [0] * 32
+WH2 = [0] * 32
 
 # Defined pieces
 Piece = [
@@ -55,6 +59,49 @@ def simulate_transformation_path(p: Pieces):
         current = result
     return current
 
+class BeginLine:
+    def __init__(this, entry_node, cell_free, cell_num):
+        this.entry_node = entry_node
+        this.cell_free_node = cell_free
+        this.busy = False
+        this.wait = datetime.now()
+        this.state = 0
+        this.cell_num = cell_num
+
+    def start(this, piece):
+        if not this.busy:
+            # Enviar peça inicial para CA enquanto CA estiver livre
+            cell_free = this.cell_free_node.get_value()
+            if isinstance(cell_free, (list, tuple)):
+                if cell_free[this.cell_num] == 1:
+                    entry_list = this.entry_node.get_value()
+                    entry_list[this.cell_num] = piece.Initial_Piece
+                    this.entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
+                    print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
+                else:
+                    ##entry_list[0] = 0 TALVEZ DESCOMENTAR
+                    ##entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
+                    try:
+                        index = WH1.index(0)
+                        WH1[index] = piece.Initial_Piece
+                        print(f"Stored piece {piece.Initial_Piece} in WH1 at position {index} after clearing CA entry")
+                        this.state = 0
+                        this.busy = True
+                        return True
+                    except ValueError:
+                        print("Warning: WH1 is full, cannot store more pieces")
+                    print("CA is busy now, sent 0 to CA_entry_piece")
+                    
+            
+        return False
+
+    def tick(this):
+        cell_free = this.cell_free_node.get_value()
+        if(cell_free[this.cell_num] == 1 and this.state == 1):
+            this.busy = False
+        elif(cell_free[this.cell_num] == 0 and this.state == 0):
+            this.state += 1
+    
 class ProdLine:
     def __init__(this, entry_node, trans_m, trans_t, cell_free, cell_steps, m1t, m2t, cell_num):
         this.entry_node = entry_node
@@ -191,7 +238,10 @@ class ProdLine:
             ##entry_node.set_value(ua.Variant(0, ua.VariantType.Int16))
         return False
 
-
+class Order:
+    def __init__(this, piece : Pieces):
+        this.piece = piece
+        this.wip = False
 
 
 # --- Load orders from ERP ---
@@ -230,8 +280,12 @@ def read_codesys_variables():
         CELL_C1 = 4
         CELL_CX = 11
 
-        WH1 = [0] * 32
-        WH2 = [0] * 32
+        beginLines=[
+            BeginLine(entry_node, cell_free_node, 0),
+            BeginLine(entry_node, cell_free_node, 1),
+            BeginLine(entry_node, cell_free_node, 2),
+            BeginLine(entry_node, cell_free_node, 3)
+        ]
 
         prodLines=[
             ProdLine(entry_node, trans_m_node_1, trans_t_node_1, cell_free_node, cell_steps_node, [1,2,3], [2,3,4], 4),
@@ -251,42 +305,23 @@ def read_codesys_variables():
 
             print(f"Processing order: type={order_type}, quantity={quantity}")
 
-            # Enviar peça inicial para CA enquanto CA estiver livre
-            while True:
-                cell_free = cell_free_node.get_value()
-                if isinstance(cell_free, (list, tuple)):
-                    if cell_free[CELL_CA] == 1:
-                        entry_list = entry_node.get_value()
-                        entry_list[0] = piece.Initial_Piece
-                        entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
-                        print(f"Sent initial piece {piece.Initial_Piece} to CA_entry_piece (CA is free)")
-                    else:
-                        ##entry_list[0] = 0 TALVEZ DESCOMENTAR
-                        ##entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
-                        try:
-                            index = WH1.index(0)
-                            WH1[index] = piece.Initial_Piece
-                            print(f"Stored piece {piece.Initial_Piece} in WH1 at position {index} after clearing CA entry")
-                            time.sleep(1)
-                        except ValueError:
-                            print("Warning: WH1 is full, cannot store more pieces")
-                        print("CA is busy now, sent 0 to CA_entry_piece")
-                        break
-                time.sleep(0.5)
+            while(not beginLines[0].start(piece)):
+                pass
 
             # Esperar C1 estar livre e peça disponível em WH1
+            '''
             while True:
                 cell_free = cell_free_node.get_value()
                 piece_available = piece.Initial_Piece in WH1
                 if isinstance(cell_free, (list, tuple)):
 
                     # Aqui: se C1 estiver ocupado, peça a 0
-                    if cell_free[CELL_C1] == 0:
+                    if cell_free[4] == 0:
                         print("C1 is busy processing...")
                         piece = 0  # Redefinir piece para 0 quando C1 ocupado
 
                     # Se C1 estiver livre e peça disponível, sair do loop
-                    if cell_free[CELL_C1] == 1 and piece_available:
+                    if cell_free[4] == 1 and piece_available:
                         index_to_remove = WH1.index(piece.Initial_Piece)
                         WH1[index_to_remove] = 0
                         print(f"Removed piece {piece.Initial_Piece} from WH1 at position {index_to_remove}")
@@ -297,6 +332,11 @@ def read_codesys_variables():
                 if not piece_available:
                     print(f"Waiting for piece {piece.Initial_Piece} to be available in WH1...")
                 time.sleep(0.5)
+            '''
+
+
+            while(beginLines[0].busy):
+                beginLines[0].tick()
 
             while not prodLines[0].start(piece):
                 pass
