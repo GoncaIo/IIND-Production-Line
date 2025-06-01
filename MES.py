@@ -52,9 +52,7 @@ Piece = [
     Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3], TIMES=[20, 20, 45], Steps=3),
     Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4], TIMES=[20, 20, 45, 45], Steps=4),
     Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 6], TIMES=[20, 20, 45, 30], Steps=4),
-    Pieces(
-        Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20, 20, 45, 45, 30], Steps=5
-    ),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20, 20, 45, 45, 30], Steps=5),
     Pieces(Initial_Piece=2, TRANSFORM=[6], TIMES=[15], Steps=1),
     Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2], TIMES=[20, 20, 20], Steps=3),
     Pieces(Initial_Piece=2, TRANSFORM=[6, 5], TIMES=[15, 20], Steps=2),
@@ -421,7 +419,7 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
             if prev_cell_free[cell_num] and not curr_cell_free:
                 if cell_queues[cell_num]:
                     removed = cell_queues[cell_num].popleft()
-                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
+                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: P{removed}", cell_num=cell_num)
                     # Adiciona a peça removida no WH2
                     try:
                         index = WH2.index(0)
@@ -440,13 +438,13 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
             if begin.busy:
                 begin.tick()
 
-        # Processar ordens de produção: verifica qual célula pode processar e manda a receita
+        # Processar ordens de produção: verifica toda a fila de pedidos e tenta executar o primeiro possível
         if prod_order_queue:
-            current_piece_type = prod_order_queue[0]
-            # Só processa se não estiver pendente de confirmação
-            if current_piece_type not in pending_orders:
+            for idx, order_type in enumerate(prod_order_queue):
+                if order_type in pending_orders:
+                    continue
                 # Ajuste para decomposição: se for (6, 8), buscar peça com Initial_Piece=8 e TRANSFORM terminando em 6
-                if isinstance(current_piece_type, tuple) and current_piece_type[0] == 6 and current_piece_type[1] == 8:
+                if isinstance(order_type, tuple) and order_type[0] == 6 and order_type[1] == 8:
                     piece = next(
                         (p for p in Piece if p.Initial_Piece == 8 and p.TRANSFORM and p.TRANSFORM[-1] == 6),
                         None,
@@ -456,7 +454,7 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                         (
                             p
                             for p in Piece
-                            if simulate_transformation_path(p) == current_piece_type
+                            if simulate_transformation_path(p) == order_type
                         ),
                         None,
                     )
@@ -475,13 +473,16 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                             saida_prevista = prod_line.start(piece)
                             if saida_prevista is not None:
                                 pending_queue_add[cell_num] = saida_prevista
-                                pending_orders.add(current_piece_type)  # Mark as pending
+                                pending_orders.add(order_type)  # Mark as pending
                                 log(
-                                    f"Started processing piece P{current_piece_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
+                                    f"Started processing piece P{order_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
                                     cell_num=cell_num,
                                 )
                                 print_cell_queue(cell_num)
                                 break
+                    # Se conseguiu alocar, não tenta outros pedidos neste ciclo
+                    if cell_num in pending_queue_add:
+                        break
 
         # Após mandar a receita, monitora flanco negativo de free_O para cada célula
         for cell_num in list(pending_queue_add.keys()):
