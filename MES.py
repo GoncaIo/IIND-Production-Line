@@ -8,6 +8,7 @@ from typing import List
 from collections import deque
 from datetime import datetime, timedelta
 import threading
+import traceback
 
 # --- Definition of Pieces and Tools ---
 
@@ -18,7 +19,6 @@ class Pieces:
     TRANSFORM: List[int] = field(default_factory=list)
     TIMES: List[int] = field(default_factory=list)  # In seconds
     Steps: int = 0
-    wip = False
 
 
 @dataclass
@@ -45,6 +45,7 @@ pending_p1 = deque()
 pending_p2 = deque()
 prod_order_queue = deque()
 cell_queues = {4: deque(), 5: deque(), 6: deque(), 7: deque(), 8: deque(), 9: deque()}
+remove_queue = deque()
 
 Piece = [
     Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20], Steps=1),
@@ -108,6 +109,15 @@ def simulate_transformation_path(p: Pieces):
     current = p.Initial_Piece
     for tool in p.TRANSFORM:
         result = Transformations.get((current, tool))
+        if result is None:
+            return None
+        current = result
+    return current
+
+def simulate_trans(p: Pieces):
+    current = p.Initial_Piece
+    for i in range(p.Steps):
+        result = Transformations.get((current, p.TRANSFORM[i]))
         if result is None:
             return None
         current = result
@@ -225,11 +235,13 @@ class BeginLine:
             this.state += 1
 
 class ProdLine:
-    def __init__(this, cell_num, piece_node_prefix, cell_free_node, cell_queues):
+    def __init__(this, cell_num, piece_node_prefix, cell_free_node, cell_queues, end_piece_node, l_free_nodes):
         this.cell_num = cell_num
         this.piece_node_prefix = piece_node_prefix
         this.cell_free_node = cell_free_node  # agora é um nó booleano individual
         this.cell_queues = cell_queues
+        this.end_piece_node = end_piece_node
+        this.l_free_node = l_free_nodes
         # busy agora é uma propriedade dinâmica
         this.wait = datetime.now()
         this.state = 0
@@ -241,26 +253,29 @@ class ProdLine:
         return len(this.cell_queues[this.cell_num]) >= 3
 
     def tick(this):
-        if datetime.now() > this.wait and this.busy:
+        if datetime.now() > this.wait:
             cell_free = this.cell_free_node.get_value()
+            end_free = this.l_free_node.get_value()
             if this.state == 0:
-                if not cell_free:
-                    log(
-                        "State 0: busy processing...",
-                        cell_num=this.cell_num,
-                    )
-                    this.state += 1
-                    this.wait = datetime.now() + timedelta(seconds=0.5)
-            elif this.state == 1:
-                if not cell_free:
+                if not end_free:
                     log(
                         "State 1: busy processing...",
                         cell_num=this.cell_num,
                     )
+                    node_initial = client.get_node(f"{this.end_piece_node}.Initial_Piece")
+                    node_tool = client.get_node(f"{this.end_piece_node}.TOOL")
+                    node_times = client.get_node(f"{this.end_piece_node}.TIMES")
+                    node_steps = client.get_node(f"{this.end_piece_node}.Steps")
+                    ninit = node_initial.get_value()
+                    ntool = node_tool.get_value()
+                    ntime = node_times.get_value()
+                    nsteps = node_steps.get_value()
+                    this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps)
                     this.state += 1
+                    print("p")
                 this.wait = datetime.now() + timedelta(seconds=0.5)
-            elif this.state == 2:
-                if cell_free:
+            elif this.state == 1:
+                if end_free:
                     # Ao terminar o processamento, remove apenas a previsão da peça da fila
                     if this.cell_queues[this.cell_num]:
                         saida_prevista = this.cell_queues[this.cell_num].popleft()
@@ -268,27 +283,20 @@ class ProdLine:
                             f"Finished processing piece (previsão saída: P{saida_prevista}). Queue length now {len(this.cell_queues[this.cell_num])}",
                             cell_num=this.cell_num,
                         )
-                        try:
-                            index = WH2.index(0)
-                            WH2[index] = saida_prevista
-                            log(
-                                f"Stored transformed piece P{saida_prevista} in WH2 at position {index}",
-                                cell_num=this.cell_num,
-                            )
-                        except ValueError:
-                            log(
-                                "WH2 is full, cannot store more pieces",
-                                cell_num=this.cell_num,
-                            )
                     else:
                         log(
                             "Finished processing but queue is empty!",
                             cell_num=this.cell_num,
                         )
+
+                    
+
+                    
+
                     this.state = 0
-                    this.piece = None
                     # busy será recalculado automaticamente pela propriedade
-                    return saida_prevista if this.piece else None
+                    print(this.p)
+                    return this.p
                 else:
                     this.wait = datetime.now() + timedelta(seconds=0.5)
 
@@ -317,6 +325,22 @@ class ProdLine:
                 )
         return None
 
+class EndLine:
+    def __init__(this, entry_node, cell_free_node, cell_num, node_prefix):
+        this.entry_node = entry_node
+        this.first_cell_free = cell_free_node
+        this.cell_num = cell_num
+        this.cap = 7
+        this.node_prefix = node_prefix
+
+    def putPiece(this, piece):
+        if(this.cap > 0):
+            print("PODE ENTRAR NA",this.cell_num)
+            if(this.first_cell_free.get_value() == 1):
+                this.cap -= 1
+                send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=6), cell_num=this.cell_num)
+                return True
+        return False
 
 class Order:
     def __init__(this, piece: Pieces):
@@ -374,19 +398,28 @@ def print_cell_queue(cell_num):
     print(f"{cell_name(cell_num)} - fila: {fila}")
 
 def prodline_worker(prod_line):
+    print("COMECEI A THREAD!!!")
     while True:
-        if prod_line.busy:
-            result_piece = prod_line.tick()
-            if result_piece is not None:
-                try:
-                    index = WH2.index(0)
-                    WH2[index] = result_piece
-                    print(f"Stored transformed piece {result_piece} in WH2 at position {index} (Célula {prod_line.cell_num})")
-                except ValueError:
-                    print(f"WH2 is full, cannot store more pieces (Célula {prod_line.cell_num})")
+        result_piece = prod_line.tick()
+        if result_piece is not None:
+            print("RESULT PIECE IS",result_piece)
+            try:
+
+                idx = WH2.index(0)
+                WH2[idx] = simulate_trans(result_piece)
+                remove_queue.append(result_piece)
+
+                ##remove_queue()
+                ##ELE NAO CORRE ESTE CODIGO
+                #index = WH2.index(0)
+                #WH2[index] = result_piece.Initial_Piece
+                ##print("REMOVE QUEUE IS",remove_queue)
+                ##print(f"Stored transformed piece {result_piece} in WH2 at position {index} (Célula {prod_line.cell_num})")
+            except ValueError:
+                print(f"WH2 is full, cannot store more pieces (Célula {prod_line.cell_num})")
         time.sleep(0.1)
 
-def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
+def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_nodes):
     prev_l_free = {cell_num: l_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     prev_cell_free = {cell_num: cell_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     # Controle para detectar flanco negativo (True->False) de free_O de cada célula
@@ -412,23 +445,24 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
             curr_l_free = l_free_nodes[cell_num].get_value()
             prev_l_free[cell_num] = curr_l_free
 
-        # Monitorar flanco negativo de Ux.free_O para remoção da fila
+        '''# Monitorar flanco negativo de Ux.free_O para remoção da fila
         for cell_num in range(4, 10):
-            curr_cell_free = cell_free_nodes[cell_num].get_value()
+            curr_l_free = l_free_nodes[cell_num].get_value()
             # Se havia peça na fila e free_O passou de True para False, remove da fila
-            if prev_cell_free[cell_num] and not curr_cell_free:
+            if prev_l_free[cell_num] and not curr_l_free:
                 if cell_queues[cell_num]:
                     removed = cell_queues[cell_num].popleft()
-                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: P{removed}", cell_num=cell_num)
+                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
                     # Adiciona a peça removida no WH2
                     try:
-                        index = WH2.index(0)
-                        WH2[index] = removed
+                        #index = WH2.index(0)
+                        #WH2[index] = removed
+                        ##remove_queue.append(removed)
                         print(f"Stored transformed piece {removed} in WH2 at position {index} (Célula {cell_num})")
                     except ValueError:
                         print(f"WH2 is full, cannot store more pieces (Célula {cell_num})")
                     print_cell_queue(cell_num)
-            prev_cell_free[cell_num] = curr_cell_free
+            prev_l_free[cell_num] = curr_l_free'''
 
         # Alimentar linhas de entrada
         for begin in beginLines:
@@ -438,13 +472,13 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
             if begin.busy:
                 begin.tick()
 
-        # Processar ordens de produção: verifica toda a fila de pedidos e tenta executar o primeiro possível
+        # Processar ordens de produção: verifica qual célula pode processar e manda a receita
         if prod_order_queue:
-            for idx, order_type in enumerate(prod_order_queue):
-                if order_type in pending_orders:
-                    continue
+            current_piece_type = prod_order_queue[0]
+            # Só processa se não estiver pendente de confirmação
+            if current_piece_type not in pending_orders:
                 # Ajuste para decomposição: se for (6, 8), buscar peça com Initial_Piece=8 e TRANSFORM terminando em 6
-                if isinstance(order_type, tuple) and order_type[0] == 6 and order_type[1] == 8:
+                if isinstance(current_piece_type, tuple) and current_piece_type[0] == 6 and current_piece_type[1] == 8:
                     piece = next(
                         (p for p in Piece if p.Initial_Piece == 8 and p.TRANSFORM and p.TRANSFORM[-1] == 6),
                         None,
@@ -454,7 +488,7 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                         (
                             p
                             for p in Piece
-                            if simulate_transformation_path(p) == order_type
+                            if simulate_transformation_path(p) == current_piece_type
                         ),
                         None,
                     )
@@ -473,16 +507,13 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                             saida_prevista = prod_line.start(piece)
                             if saida_prevista is not None:
                                 pending_queue_add[cell_num] = saida_prevista
-                                pending_orders.add(order_type)  # Mark as pending
+                                pending_orders.add(current_piece_type)  # Mark as pending
                                 log(
-                                    f"Started processing piece P{order_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
+                                    f"Started processing piece P{current_piece_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
                                     cell_num=cell_num,
                                 )
                                 print_cell_queue(cell_num)
                                 break
-                    # Se conseguiu alocar, não tenta outros pedidos neste ciclo
-                    if cell_num in pending_queue_add:
-                        break
 
         # Após mandar a receita, monitora flanco negativo de free_O para cada célula
         for cell_num in list(pending_queue_add.keys()):
@@ -523,9 +554,9 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
 
         # Adiciona controle para remoção da fila apenas no flanco negativo de free_O
         for cell_num in range(4, 10):
-            curr_cell_free = cell_free_nodes[cell_num].get_value()
+            curr_l_free = l_free_nodes[cell_num].get_value()
             # Se havia peça na fila e free_O passou de True para False, remove da fila
-            if prev_cell_free[cell_num] and not curr_cell_free:
+            if not prev_l_free[cell_num] and curr_l_free:
                 if cell_queues[cell_num]:
                     removed = cell_queues[cell_num].popleft()
                     log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
@@ -533,11 +564,24 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                     try:
                         index = WH2.index(0)
                         WH2[index] = removed
+                        ##remove_queue.append(removed)
                         print(f"Stored transformed piece {removed} in WH2 at position {index} (Célula {cell_num})")
                     except ValueError:
                         print(f"WH2 is full, cannot store more pieces (Célula {cell_num})")
                     print_cell_queue(cell_num)
-            prev_cell_free[cell_num] = curr_cell_free
+            prev_l_free[cell_num] = curr_l_free
+
+        if(len(remove_queue) > 0):
+            placed = False
+            curPiece = remove_queue[0]
+            whPos = WH2.index(simulate_trans(curPiece))
+            print("Trying to remove")
+            for line in end_lines:
+                print("Tried in line",line.cell_num)
+                if(not placed and line.putPiece(whPos)):
+                    remove_queue.pop()
+                    WH2[whPos] = 0
+                    placed = True
 
         time.sleep(0.1)
 
@@ -583,6 +627,21 @@ def read_codesys_variables():
             9: client.get_node(
                 "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.U6.free_O"
             ),
+            10: client.get_node(
+                "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.free_O"
+            ),
+            11: client.get_node(
+                "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UX.free_O"
+            ),
+            12: client.get_node(
+                "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UY.free_O"
+            ),
+            13: client.get_node(
+                "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UZ.free_O"
+            ),
+            14: client.get_node(
+                "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UW.free_O"
+            )
         }
         # Adiciona os nós dos tapetes de saída (LA, LB, LC, LCD, L1, L2, L3, L4, L5, L6, LT)
         l_free_nodes = {
@@ -605,6 +664,19 @@ def read_codesys_variables():
             7: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.U4.piece_I",
             8: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.U5.piece_I",
             9: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.U6.piece_I",
+            10: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I",
+            11: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UX.piece_I",
+            12: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UY.piece_I",
+            13: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UZ.piece_I",
+            14: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UW.piece_I",
+        }
+        end_piece_nodes = {
+            4: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L1.piece_I"),
+            5: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L2.piece_I"),
+            6: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L3.piece_I"),
+            7: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L4.piece_I"),
+            8: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L5.piece_I"),
+            9: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L6.piece_I")
         }
         beginLines = [
             BeginLine(entry_node, cell_free_nodes[0], 0, piece_type_allowed=1),
@@ -618,10 +690,15 @@ def read_codesys_variables():
                 piece_node_prefixes[cell_num],
                 cell_free_nodes[cell_num],
                 cell_queues,
+                end_piece_nodes[cell_num],
+                l_free_nodes[cell_num]
             )
             for cell_num in range(4, 10)
         ]
-        mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes)
+        end_lines = [
+            EndLine(entry_node, cell_free_nodes[cell_num], cell_num, piece_node_prefixes[cell_num]) for cell_num in range(11,15)
+        ]
+        mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_nodes)
     except KeyboardInterrupt:
         log("Interrupted by user. Disconnecting client...")
         client.disconnect()
@@ -629,6 +706,7 @@ def read_codesys_variables():
         sys.exit(0)
     except Exception as e:
         log(f"An error occurred: {e}")
+        traceback.print_exc()
         client.disconnect()
         sys.exit(1)
     print("WH1:", WH1)

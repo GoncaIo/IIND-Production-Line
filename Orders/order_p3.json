@@ -4,32 +4,8 @@
   "OrderID": 42,
   "orders": [
     {
-      "type": 5,
-      "quantity": 1,
-      "DDate": 15,
-      "Penalty": 5.0
-    },
-	{
-      "type": 0,
-      "quantity": 2,
-      "DDate": 15,
-      "Penalty": 5.0
-    },
-  {
-      "type": 8,
-      "quantity": 1,
-      "DDate": 15,
-      "Penalty": 5.0
-    },
-  {
-      "type": 14,
-      "quantity": 1,
-      "DDate": 15,
-      "Penalty": 5.0
-    },
-  {
-      "type": 10,
-      "quantity": 2,
+      "type": 3,
+      "quantity": 8,
       "DDate": 15,
       "Penalty": 5.0
     }
