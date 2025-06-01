@@ -336,17 +336,14 @@ for filename in os.listdir(orders_folder):
             for order in data.get("orders", []):
                 order_type = order.get("type")
                 quantity = order.get("quantity")
-                # Check for invalid piece type
-                if (isinstance(order_type, int) and order_type > 11) or (isinstance(order_type, tuple) and order_type[0] > 11):
-                    print(f"Erro: Peça {order_type} maior que 11 não é permitida. Ignorando pedido.")
+                # Check for invalid piece type (menor que 3 ou maior que 11)
+                if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
+                    print(f"Erro: Peça {order_type} fora do intervalo permitido (3-11). Ignorando pedido.")
                     continue
                 # Decomposição especial para P6
                 if order_type == 6:
                     for _ in range(quantity):
-                        # Primeiro, pedir uma P8 (com peça inicial padrão)
                         order_queue.append((8, 1))
-                        # Depois, pedir uma P6 a partir de P8
-                        # Para identificar que é P6 a partir de P8, usamos uma tupla (tipo, peça_inicial)
                         order_queue.append(((6, 8), 1))
                 else:
                     order_queue.append((order_type, quantity))
@@ -354,8 +351,8 @@ for filename in os.listdir(orders_folder):
 total_raw_materials = {"P1": 0, "P2": 0}
 for order_type, quantity in order_queue:
     # Ajuste para decomposição: se for (6, 8), peça inicial é 8
-    if (isinstance(order_type, int) and order_type > 11) or (isinstance(order_type, tuple) and order_type[0] > 11):
-        print(f"Erro: Peça {order_type} maior que 11 não é permitida. Ignorando pedido.")
+    if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
+        print(f"Erro: Peça {order_type} fora do intervalo permitido (3-11). Ignorando pedido.")
         continue
     needs = calculate_raw_materials_recursive(order_type, quantity)
     total_raw_materials["P1"] += needs["P1"]
@@ -493,6 +490,17 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
             if prev_cell_free_negedge[cell_num] and not curr_cell_free:
                 saida_prevista = pending_queue_add[cell_num]
                 cell_queues[cell_num].append(saida_prevista)
+                # Remover a peça inicial correspondente do WH1 ao entrar na fila da célula
+                piece_initial = None
+                # Encontrar a peça inicial correspondente ao tipo saida_prevista
+                for p in Piece:
+                    if simulate_transformation_path(p) == saida_prevista:
+                        piece_initial = p.Initial_Piece
+                        break
+                if piece_initial is not None and piece_initial in WH1:
+                    idx = WH1.index(piece_initial)
+                    WH1[idx] = 0
+                    log(f"Removida peça inicial P{piece_initial} do WH1 ao entrar na fila da célula {cell_num}", cell_num=cell_num)
                 log(
                     f"Peça {saida_prevista} entrou na fila da célula {cell_num} (flanco negativo de free_O)",
                     cell_num=cell_num,
@@ -503,7 +511,6 @@ def mes_main_loop(beginLines, prodLines, cell_free_nodes, l_free_nodes):
                     prod_order_queue.popleft()
                     pending_orders.discard(saida_prevista)
                 else:
-                    # Remove only the first occurrence if multiple of same type
                     try:
                         prod_order_queue.remove(saida_prevista)
                     except ValueError:
