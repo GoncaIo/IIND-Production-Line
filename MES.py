@@ -19,6 +19,7 @@ class Pieces:
     TRANSFORM: List[int] = field(default_factory=list)
     TIMES: List[int] = field(default_factory=list)  # In seconds
     Steps: int = 0
+    Curr_steps: int = 0
 
 
 @dataclass
@@ -116,7 +117,8 @@ def simulate_transformation_path(p: Pieces):
 
 def simulate_trans(p: Pieces):
     current = p.Initial_Piece
-    for i in range(p.Steps):
+    for i in range(0,p.Curr_steps,1):
+        print(current,p.TRANSFORM[i])
         result = Transformations.get((current, p.TRANSFORM[i]))
         if result is None:
             return None
@@ -160,18 +162,25 @@ def print_prod_order_queue():
     print(f"WH1: {WH1}")
     print(f"WH2: {WH2}")
     
-def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None):
+def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None, mult = 1000):
     node_initial = client.get_node(f"{node_prefix}.Initial_Piece")
+    piece.Initial_Piece=simulate_trans(piece)
     node_tool = client.get_node(f"{node_prefix}.TOOL")
     node_times = client.get_node(f"{node_prefix}.TIMES")
     node_steps = client.get_node(f"{node_prefix}.Steps")
+    curr_steps = client.get_node(f"{node_prefix}.Curr_steps")
+    piece.TRANSFORM = piece.TRANSFORM[piece.Curr_steps:]
+    piece.TIMES = piece.TIMES[piece.Curr_steps:]
+    piece.Steps = piece.Steps - piece.Curr_steps
     tools_arr = piece.TRANSFORM + [0] * (6 - len(piece.TRANSFORM))
-    times_arr = [t * 1000 for t in piece.TIMES] + [0] * (6 - len(piece.TIMES))
-    node_initial.set_value(ua.Variant(piece.Initial_Piece, ua.VariantType.Int16))
+    times_arr = [t * mult for t in piece.TIMES] + [0] * (6 - len(piece.TIMES))
+    node_initial.set_value(piece.Initial_Piece, ua.VariantType.Int16)
     node_tool.set_value(ua.Variant(tools_arr, ua.VariantType.Int16))
     node_times.set_value(ua.Variant(times_arr, ua.VariantType.Int64))
-    node_steps.set_value(ua.Variant(len(piece.TRANSFORM), ua.VariantType.Int16))
+    node_steps.set_value(ua.Variant(piece.Steps, ua.VariantType.Int16))
+    curr_steps.set_value(ua.Variant(0, ua.VariantType.Int16))
     # Fix: use cell_num for logging, not node_prefix
+    print("PIECE END",piece)
     log(
         f"Recebeu: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}",
         cell_num=cell_num
@@ -266,11 +275,13 @@ class ProdLine:
                     node_tool = client.get_node(f"{this.end_piece_node}.TOOL")
                     node_times = client.get_node(f"{this.end_piece_node}.TIMES")
                     node_steps = client.get_node(f"{this.end_piece_node}.Steps")
+                    node_cursteps = client.get_node(f"{this.end_piece_node}.Curr_steps")
                     ninit = node_initial.get_value()
                     ntool = node_tool.get_value()
                     ntime = node_times.get_value()
                     nsteps = node_steps.get_value()
-                    this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps)
+                    csteps = node_cursteps.get_value()
+                    this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps,Curr_steps=csteps)
                     this.state += 1
                     print("p")
                 this.wait = datetime.now() + timedelta(seconds=0.5)
@@ -330,12 +341,11 @@ class EndLine:
         this.entry_node = entry_node
         this.first_cell_free = cell_free_node
         this.cell_num = cell_num
-        this.cap = 7
+        this.cap = 6
         this.node_prefix = node_prefix
 
     def putPiece(this, piece):
         if(this.cap > 0):
-            print("PODE ENTRAR NA",this.cell_num)
             if(this.first_cell_free.get_value() == 1):
                 this.cap -= 1
                 send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=6), cell_num=this.cell_num)
@@ -398,23 +408,13 @@ def print_cell_queue(cell_num):
     print(f"{cell_name(cell_num)} - fila: {fila}")
 
 def prodline_worker(prod_line):
-    print("COMECEI A THREAD!!!")
     while True:
         result_piece = prod_line.tick()
         if result_piece is not None:
-            print("RESULT PIECE IS",result_piece)
             try:
-
                 idx = WH2.index(0)
                 WH2[idx] = simulate_trans(result_piece)
                 remove_queue.append(result_piece)
-
-                ##remove_queue()
-                ##ELE NAO CORRE ESTE CODIGO
-                #index = WH2.index(0)
-                #WH2[index] = result_piece.Initial_Piece
-                ##print("REMOVE QUEUE IS",remove_queue)
-                ##print(f"Stored transformed piece {result_piece} in WH2 at position {index} (Célula {prod_line.cell_num})")
             except ValueError:
                 print(f"WH2 is full, cannot store more pieces (Célula {prod_line.cell_num})")
         time.sleep(0.1)
@@ -444,25 +444,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         for cell_num in range(4, 10):
             curr_l_free = l_free_nodes[cell_num].get_value()
             prev_l_free[cell_num] = curr_l_free
-
-        '''# Monitorar flanco negativo de Ux.free_O para remoção da fila
-        for cell_num in range(4, 10):
-            curr_l_free = l_free_nodes[cell_num].get_value()
-            # Se havia peça na fila e free_O passou de True para False, remove da fila
-            if prev_l_free[cell_num] and not curr_l_free:
-                if cell_queues[cell_num]:
-                    removed = cell_queues[cell_num].popleft()
-                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
-                    # Adiciona a peça removida no WH2
-                    try:
-                        #index = WH2.index(0)
-                        #WH2[index] = removed
-                        ##remove_queue.append(removed)
-                        print(f"Stored transformed piece {removed} in WH2 at position {index} (Célula {cell_num})")
-                    except ValueError:
-                        print(f"WH2 is full, cannot store more pieces (Célula {cell_num})")
-                    print_cell_queue(cell_num)
-            prev_l_free[cell_num] = curr_l_free'''
 
         # Alimentar linhas de entrada
         for begin in beginLines:
@@ -499,7 +480,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         cell_free = prod_line.cell_free_node.get_value()
                         if (
                             cell_free
-                            and len(cell_queues[cell_num]) < 3
+                            and len(cell_queues[cell_num]) < 2
                             and cell_can_process(piece, cell_num)
                             and piece.Initial_Piece in WH1
                             and cell_num not in pending_queue_add
@@ -572,16 +553,27 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             prev_l_free[cell_num] = curr_l_free
 
         if(len(remove_queue) > 0):
-            placed = False
             curPiece = remove_queue[0]
-            whPos = WH2.index(simulate_trans(curPiece))
-            print("Trying to remove")
-            for line in end_lines:
-                print("Tried in line",line.cell_num)
-                if(not placed and line.putPiece(whPos)):
+            cpIdx = simulate_trans(curPiece)
+            endIdx = simulate_transformation_path(curPiece)
+            whPos = WH2.index(cpIdx)
+            if cpIdx == endIdx:
+                placed = False
+                for line in end_lines:
+                    print("Tried in line",line.cell_num)
+                    if(not placed and line.putPiece(whPos)):
+                        remove_queue.pop()
+                        WH2[whPos] = 0
+                        placed = True
+                        break
+            else:
+                print("Sending back:", curPiece)
+                if cell_free_nodes[10].get_value():
+                    print("Cell free, sending back.")
+                    send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10, mult=1)
                     remove_queue.pop()
                     WH2[whPos] = 0
-                    placed = True
+
 
         time.sleep(0.1)
 
@@ -593,6 +585,8 @@ def read_codesys_variables():
     try:
         client.connect()
         log(f"Connected to OPC UA Server at {server_url}")
+        #print("TESTE:",simulate_trans(Pieces(1,[1,2,3,6,0,0],[20,20,45,40],4,3)))
+        #send_piece_to_codesys(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I",Pieces(1,[1,2,3,6,0,0],[20,20,45,40],4,3),cell_num=10)
         entry_node = client.get_node(
             "ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Entry_pieces"
         )

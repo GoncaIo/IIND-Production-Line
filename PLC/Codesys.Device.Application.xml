@@ -99,7 +99,7 @@
       <UserDefElement iecname="_t" type="T_TIME" byteoffset="8" vartype="VAR" access="ReadWrite" />
       <UserDefElement iecname="AC" type="T_SFCActionControl" byteoffset="12" vartype="VAR" access="ReadWrite" />
     </TypeUserDef>
-    <TypeUserDef name="T_Linear_Conveyor" size="461" nativesize="952" typeclass="Userdef" pouclass="FUNCTION_BLOCK" iecname="Linear_Conveyor">
+    <TypeUserDef name="T_Linear_Conveyor" size="461" nativesize="1048" typeclass="Userdef" pouclass="FUNCTION_BLOCK" iecname="Linear_Conveyor">
       <UserDefElement iecname="Ioff" type="T_UINT" byteoffset="0" vartype="VAR_INPUT" access="ReadWrite" />
       <UserDefElement iecname="Qoff" type="T_UINT" byteoffset="2" vartype="VAR_INPUT" access="ReadWrite" />
       <UserDefElement iecname="free_I" type="T_BOOL" byteoffset="4" vartype="VAR_INPUT" access="ReadWrite" />
@@ -119,7 +119,7 @@
       <UserDefElement iecname="Branch1__full__to__free" type="T_BOOL" byteoffset="459" vartype="VAR" access="ReadWrite" />
       <UserDefElement iecname="send__to__free" type="T_BOOL" byteoffset="460" vartype="VAR" access="ReadWrite" />
     </TypeUserDef>
-    <TypeUserDef name="T_Loading_Conveyor" size="495" nativesize="992" typeclass="Userdef" pouclass="FUNCTION_BLOCK" iecname="Loading_Conveyor">
+    <TypeUserDef name="T_Loading_Conveyor" size="539" nativesize="1032" typeclass="Userdef" pouclass="FUNCTION_BLOCK" iecname="Loading_Conveyor">
       <UserDefElement iecname="Ioff" type="T_UINT" byteoffset="0" vartype="VAR_INPUT" access="ReadWrite" />
       <UserDefElement iecname="Qoff" type="T_UINT" byteoffset="2" vartype="VAR_INPUT" access="ReadWrite" />
       <UserDefElement iecname="free_I" type="T_BOOL" byteoffset="4" vartype="VAR_INPUT" access="ReadWrite" />
@@ -129,15 +129,16 @@
       <UserDefElement iecname="piece_I" type="T_PIECE" byteoffset="12" vartype="VAR_INPUT" access="ReadWrite" />
       <UserDefElement iecname="free_O" type="T_BOOL" byteoffset="56" vartype="VAR_OUTPUT" access="ReadWrite" />
       <UserDefElement iecname="recv_O" type="T_BOOL" byteoffset="57" vartype="VAR_OUTPUT" access="ReadWrite" />
-      <UserDefElement iecname="_free_O" type="T_SFCActionType" byteoffset="60" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="_GVL_Out_Qoff_1_" type="T_SFCActionType" byteoffset="188" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="_GVL_Out_load_wh_" type="T_SFCActionType" byteoffset="316" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="free" type="T_SFCStepType" byteoffset="444" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="recv" type="T_SFCStepType" byteoffset="460" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="full" type="T_SFCStepType" byteoffset="476" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="free__to__recv" type="T_BOOL" byteoffset="492" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="recv__to__full" type="T_BOOL" byteoffset="493" vartype="VAR" access="ReadWrite" />
-      <UserDefElement iecname="full__to__free" type="T_BOOL" byteoffset="494" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="piece_O" type="T_PIECE" byteoffset="60" vartype="VAR_OUTPUT" access="ReadWrite" />
+      <UserDefElement iecname="_free_O" type="T_SFCActionType" byteoffset="104" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="_GVL_Out_Qoff_1_" type="T_SFCActionType" byteoffset="232" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="_GVL_Out_load_wh_" type="T_SFCActionType" byteoffset="360" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="free" type="T_SFCStepType" byteoffset="488" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="recv" type="T_SFCStepType" byteoffset="504" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="full" type="T_SFCStepType" byteoffset="520" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="free__to__recv" type="T_BOOL" byteoffset="536" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="recv__to__full" type="T_BOOL" byteoffset="537" vartype="VAR" access="ReadWrite" />
+      <UserDefElement iecname="full__to__free" type="T_BOOL" byteoffset="538" vartype="VAR" access="ReadWrite" />
     </TypeUserDef>
     <TypeUserDef name="T_Maq_3tools" size="1011" nativesize="1992" typeclass="Userdef" pouclass="FUNCTION_BLOCK" iecname="Maq_3tools">
       <UserDefElement iecname="Ioff" type="T_UINT" byteoffset="0" vartype="VAR_INPUT" access="ReadWrite" />
