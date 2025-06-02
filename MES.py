@@ -101,9 +101,9 @@ cell_tools = {
 }
 
 
-def cell_can_process(piece: Pieces, cell_num: int):
+def cell_can_process(piece: Pieces, cell_num: int, tools_num=4):
     """Check if the cell has all tools needed for the piece's transformation."""
-    tools_needed = set(piece.TRANSFORM[0:3])
+    tools_needed = set(piece.TRANSFORM[0:tools_num])
     tools_needed.discard(0)
     tools_available = set(cell_tools.get(cell_num, []))
     return tools_needed.issubset(tools_available)
@@ -326,7 +326,7 @@ class ProdLine:
 
     def start(this, piece_in: Pieces):
         # Só inicia se houver menos de 3 peças na fila da célula
-        if len(this.cell_queues[this.cell_num]) < 3:
+        if datetime.now() > this.wait and len(this.cell_queues[this.cell_num]) < 3:
             # Envia comando para retirar a peça do WH1, mas só confirma quando free_O ficar False
             try:
                 idx = WH1.index(piece_in.Initial_Piece)
@@ -341,6 +341,7 @@ class ProdLine:
                 if not hasattr(ProdLine, "pending_wh1_remove"):
                     ProdLine.pending_wh1_remove = {}
                 ProdLine.pending_wh1_remove[this.cell_num] = (idx, piece_in.Initial_Piece)
+                this.wait = datetime.now() + timedelta(seconds=4)
                 return saida_prevista  # Retorna a previsão para ser usada fora
             except ValueError:
                 log(
@@ -436,8 +437,9 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
     # Lista de pedidos pendentes para cada célula (aguardando flanco negativo)
     pending_queue_add = {}
     pending_orders = set()  # Track orders waiting for confirmation
+    sendBackBreak = datetime.now()
 
-    end = datetime.now() + timedelta(seconds=60)
+    ##end = datetime.now() + timedelta(seconds=60)
 
     # Iniciar uma thread para cada ProdLine
     for prod_line in prodLines:
@@ -472,6 +474,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 prod_line = prodLines[cell_num - 4]
                 prod_line.cell_free_node = cell_free_nodes[cell_num]
                 cell_free = prod_line.cell_free_node.get_value()
+                print("Trying to send back in cell",cell_num)
                 if (
                     cell_free
                     and len(cell_queues[cell_num]) < 2
@@ -487,6 +490,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                             cell_num=cell_num,
                         )
                         sentBackQueue.pop()
+                        print("Sent back popped size",len(sentBackQueue))
                         print_cell_queue(cell_num)
                         break
 
@@ -610,7 +614,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         WH2[whPos] = 0
                         placed = True
                         break
-            else:
+            elif sendBackBreak < datetime.now():
                 print("Sending back:", curPiece)
                 if cell_free_nodes[10].get_value():
                     print("Cell free, sending back.")
@@ -618,9 +622,11 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10)
                     remove_queue.pop()
                     WH2[whPos] = 0
+                    sendBackBreak = datetime.now() + timedelta(seconds=2)
 
         #VER SE ALGO FOI ENVIADO PARA TRAS
         curr_sent_back_l_free = l_free_nodes[10].get_value()
+        ##print(curr_sent_back_l_free)
         if prev_sent_back_l_free and not curr_sent_back_l_free:
             nodeTxt = "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.piece_I"
             node_initial = client.get_node(f"{nodeTxt}.Initial_Piece")
@@ -632,15 +638,16 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             WH1[WH1.index(0)] = p.Initial_Piece
             print("Piece in sent back queue:",p)
             sentBackQueue.append(p)
+            print("Sent back queue size",len(sentBackQueue))
         
         prev_sent_back_l_free = curr_sent_back_l_free
 
-        if(datetime.now() > end):
+        ##if(datetime.now() > end):
             
-            eod_node.set_value(1,ua.VariantType.Boolean)
-            time.sleep(5)
-            end = datetime.now() + timedelta(seconds=60)
-            eod_node.set_value(0,ua.VariantType.Boolean)
+            ##eod_node.set_value(1,ua.VariantType.Boolean)
+            ##time.sleep(5)
+            ##end = datetime.now() + timedelta(seconds=60)
+            ##eod_node.set_value(0,ua.VariantType.Boolean)
 
 
         time.sleep(0.1)

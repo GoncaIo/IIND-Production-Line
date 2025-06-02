@@ -8,6 +8,36 @@
       "quantity": 2,
       "DDate": 15,
       "Penalty": 5.0
+    },
+	{
+      "type": 6,
+      "quantity": 2,
+      "DDate": 15,
+      "Penalty": 5.0
+    },
+	{
+      "type": 7,
+      "quantity": 2,
+      "DDate": 15,
+      "Penalty": 5.0
+    },
+	{
+      "type": 6,
+      "quantity": 2,
+      "DDate": 15,
+      "Penalty": 5.0
+    },
+	{
+      "type": 7,
+      "quantity": 2,
+      "DDate": 15,
+      "Penalty": 5.0
+    },
+	{
+      "type": 6,
+      "quantity": 2,
+      "DDate": 15,
+      "Penalty": 5.0
     }
   ]
 }	
