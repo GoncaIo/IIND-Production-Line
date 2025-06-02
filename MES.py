@@ -341,7 +341,7 @@ class ProdLine:
                 if not hasattr(ProdLine, "pending_wh1_remove"):
                     ProdLine.pending_wh1_remove = {}
                 ProdLine.pending_wh1_remove[this.cell_num] = (idx, piece_in.Initial_Piece)
-                this.wait = datetime.now() + timedelta(seconds=4)
+                this.wait = datetime.now() + timedelta(seconds=1)
                 return saida_prevista  # Retorna a previsão para ser usada fora
             except ValueError:
                 log(
@@ -421,8 +421,11 @@ def prodline_worker(prod_line):
         if result_piece is not None:
             try:
                 idx = WH2.index(0)
+                print("Trying to remove piece",result_piece,"'\n")
                 WH2[idx] = simulate_trans(result_piece)
-                remove_queue.append(result_piece)
+                print("Simulated trans is ",WH2[idx],'\n\n')
+                remove_queue.append(apply_trans(result_piece))
+                print("Remove queue",remove_queue)
             except ValueError:
                 print(f"WH2 is full, cannot store more pieces (Célula {prod_line.cell_num})")
         time.sleep(0.1)
@@ -469,30 +472,34 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         #Enviar as peças que foram enviadas de volta (EX: P7)
         if len(sentBackQueue) > 0:
             curPiece = sentBackQueue[0]
-
-            for cell_num in range(4, 10):
-                prod_line = prodLines[cell_num - 4]
-                prod_line.cell_free_node = cell_free_nodes[cell_num]
-                cell_free = prod_line.cell_free_node.get_value()
-                print("Trying to send back in cell",cell_num)
-                if (
-                    cell_free
-                    and len(cell_queues[cell_num]) < 2
-                    and cell_can_process(curPiece, cell_num)
-                    and curPiece.Initial_Piece in WH1
-                    and cell_num not in pending_queue_add
-                ):
-                    saida_prevista = prod_line.start(curPiece)
-                    if saida_prevista is not None:
-                        pending_queue_add[cell_num] = saida_prevista
-                        log(
-                            f"Started processing *returned* piece P{curPiece.Initial_Piece} on ProdLine (aguardando flanco negativo)",
-                            cell_num=cell_num,
-                        )
-                        sentBackQueue.pop()
-                        print("Sent back popped size",len(sentBackQueue))
-                        print_cell_queue(cell_num)
-                        break
+            stop = False
+            for i in range(4,0,-1):
+                if not stop:
+                    for cell_num in range(4, 10):
+                        prod_line = prodLines[cell_num - 4]
+                        prod_line.cell_free_node = cell_free_nodes[cell_num]
+                        cell_free = prod_line.cell_free_node.get_value()
+                        print("Trying to send back in cell",cell_num)
+                    
+                        print("Tentar com i =",i)
+                        if (
+                            cell_free
+                            and len(cell_queues[cell_num]) < 2
+                            and cell_can_process(curPiece, cell_num,i)
+                            and curPiece.Initial_Piece in WH1
+                            and cell_num not in pending_queue_add
+                        ):
+                            saida_prevista = prod_line.start(curPiece)
+                            if saida_prevista is not None:
+                                pending_queue_add[cell_num] = saida_prevista
+                                log(
+                                    f"Started processing *returned* piece P{curPiece.Initial_Piece} on ProdLine (aguardando flanco negativo)",
+                                    cell_num=cell_num,
+                                )
+                                sentBackQueue.pop()
+                                print("Sent back popped size",len(sentBackQueue))
+                                print_cell_queue(cell_num)
+                                stop = True
 
 
 
@@ -518,27 +525,31 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         None,
                     )
                 if piece:
-                    for cell_num in range(4, 10):
-                        prod_line = prodLines[cell_num - 4]
-                        prod_line.cell_free_node = cell_free_nodes[cell_num]
-                        cell_free = prod_line.cell_free_node.get_value()
-                        if (
-                            cell_free
-                            and len(cell_queues[cell_num]) < 2
-                            and cell_can_process(piece, cell_num)
-                            and piece.Initial_Piece in WH1
-                            and cell_num not in pending_queue_add
-                        ):
-                            saida_prevista = prod_line.start(piece)
-                            if saida_prevista is not None:
-                                pending_queue_add[cell_num] = saida_prevista
-                                pending_orders.add(current_piece_type)  # Mark as pending
-                                log(
-                                    f"Started processing piece P{current_piece_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
-                                    cell_num=cell_num,
-                                )
-                                print_cell_queue(cell_num)
-                                break
+                    stop = False
+                    for i in range(4,0,-1):
+                        if not stop:
+                            for cell_num in range(4, 10):
+                                prod_line = prodLines[cell_num - 4]
+                                prod_line.cell_free_node = cell_free_nodes[cell_num]
+                                cell_free = prod_line.cell_free_node.get_value()
+                                for i in range(4,0,-1):
+                                    if (
+                                        cell_free
+                                        and len(cell_queues[cell_num]) < 2
+                                        and cell_can_process(piece, cell_num, i)
+                                        and piece.Initial_Piece in WH1
+                                        and cell_num not in pending_queue_add
+                                    ):
+                                        saida_prevista = prod_line.start(piece)
+                                        if saida_prevista is not None:
+                                            pending_queue_add[cell_num] = saida_prevista
+                                            pending_orders.add(current_piece_type)  # Mark as pending
+                                            log(
+                                                f"Started processing piece P{current_piece_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
+                                                cell_num=cell_num,
+                                            )
+                                            print_cell_queue(cell_num)
+                                            stop = True
 
 
         # Após mandar a receita, monitora flanco negativo de free_O para cada célula
@@ -591,7 +602,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     try:
                         index = WH2.index(0)
                         WH2[index] = removed
-                        ##remove_queue.append(removed)
                         print(f"Stored transformed piece {removed} in WH2 at position {index} (Célula {cell_num})")
                     except ValueError:
                         print(f"WH2 is full, cannot store more pieces (Célula {cell_num})")
@@ -603,7 +613,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             cpIdx = simulate_trans(curPiece)
             endIdx = simulate_transformation_path(curPiece)
             whPos = WH2.index(cpIdx)
-            print("CurIdx=",cpIdx,"EndIdx=",endIdx)
             if cpIdx == endIdx:
                 placed = False
                 for line in end_lines:
@@ -615,10 +624,10 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         placed = True
                         break
             elif sendBackBreak < datetime.now():
-                print("Sending back:", curPiece)
                 if cell_free_nodes[10].get_value():
                     print("Cell free, sending back.")
                     curPiece = apply_trans(curPiece)
+                    print("Applied transformation to piece. Now sending back:",curPiece)
                     send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10)
                     remove_queue.pop()
                     WH2[whPos] = 0
@@ -628,7 +637,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         curr_sent_back_l_free = l_free_nodes[10].get_value()
         ##print(curr_sent_back_l_free)
         if prev_sent_back_l_free and not curr_sent_back_l_free:
-            nodeTxt = "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.piece_I"
+            nodeTxt = "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.piece_O"
             node_initial = client.get_node(f"{nodeTxt}.Initial_Piece")
             node_tool = client.get_node(f"{nodeTxt}.TOOL")
             node_times = client.get_node(f"{nodeTxt}.TIMES")
@@ -739,12 +748,12 @@ def read_codesys_variables():
             14: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UW.piece_I",
         }
         end_piece_nodes = {
-            4: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L1.piece_I"),
-            5: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L2.piece_I"),
-            6: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L3.piece_I"),
-            7: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L4.piece_I"),
-            8: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L5.piece_I"),
-            9: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L6.piece_I")
+            4: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L1.piece_O"),
+            5: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L2.piece_O"),
+            6: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L3.piece_O"),
+            7: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L4.piece_O"),
+            8: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L5.piece_O"),
+            9: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L6.piece_O")
         }
         beginLines = [
             BeginLine(entry_node, cell_free_nodes[0], 0, piece_type_allowed=1),
