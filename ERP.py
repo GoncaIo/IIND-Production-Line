@@ -58,7 +58,7 @@ def process_client_order(client_order):
     client_order_db_id = cursor.fetchone()[0]
 
     for order in client_order['orders']:
-        cursor.execute("""
+        cursor.execute(""" 
             INSERT INTO orders.orders (
                 client_order_id, type, quantity, ddate, penalty, status, execution_day
             ) VALUES (%s, %s, %s, %s, %s, %s, %s);
@@ -75,28 +75,30 @@ def process_client_order(client_order):
 def daily_processor():
     global current_day
     while True:
-        # Verifica se existem pedidos na base de dados
+        # Atualiza ddate de todos os pedidos pendentes ou em execução
+        if current_day != 1:
+            cursor.execute("""
+                UPDATE orders.orders
+                SET ddate = ddate - 1
+                WHERE status IN ('pending', 'in_progress') AND ddate > 0;
+            """)
+
+        # Verifica se existem pedidos pendentes
         cursor.execute("SELECT COUNT(*) FROM orders.orders WHERE status = 'pending';")
         order_count = cursor.fetchone()[0]
 
-        if order_count == 0:
-            print("[INFO] Ainda não há pedidos pendentes. Aguardando...")
-            time.sleep(1)
+        # Enquanto nao houver pedidos nenhum na database, nao continua a espera de pedidos
+        if order_count == 0 and current_day == 1:
             continue
 
+        if order_count == 0:
+            print("[INFO] Não há pedidos pendentes. Aguardando...")
+            print(f"\nNovo dia: {current_day}")
+            current_day += 1
+            time.sleep(60)  # Simula 1 dia
+            continue
+ 
         print(f"\nNovo dia: {current_day}")
-
-        if current_day != 1:
-            # Reduzir o ddate de todos os pedidos pendentes
-            cursor.execute("""-
-                UPDATE orders.orders
-                SET ddate = ddate - 1,
-                    status = CASE
-                        WHEN ddate - 1 <= 0 THEN 'delayed'
-                        ELSE status
-                    END
-                WHERE ddate > 0;
-            """)
 
         total_today = 0
         ids_to_process = set()
@@ -111,9 +113,9 @@ def daily_processor():
         pending_orders = cursor.fetchall()
 
         #Seleciona os que precisam mesmo de ser feitos hoje
-        for order_id, quantity, ddate, status in pending_orders:
+        for order_id, quantity, ddate in pending_orders:
             if ddate <= 1:
-                if total_today + quantity <= MAX_PIECES or status == 'delayed':
+                if total_today + quantity <= MAX_PIECES:
                     ids_to_process.add(order_id)
                     total_today += quantity
 
@@ -166,13 +168,20 @@ def daily_processor():
         time.sleep(60)  # Simula 1 dia
 
         
-# Iniciar threads
-t1 = threading.Thread(target=udp_listener)
-t2 = threading.Thread(target=daily_processor)
+if __name__ == "__main__":
+    try:
+        t1 = threading.Thread(target=udp_listener)
+        t2 = threading.Thread(target=daily_processor)
 
-t1.start()
-t2.start()
+        t1.start()
+        t2.start()
 
-t1.join()
-t2.join()
+        t1.join()
+        t2.join()
+    except KeyboardInterrupt:
+        print("\n[INFO] Encerrando servidor...")    
+        sock.close()
+        cursor.close()
+        conn.close()
+        # Threads serão encerradas ao sair do programa
 

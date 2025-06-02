@@ -380,10 +380,18 @@ class Order:
 
 order_status_list = []
 
-def mark_order_done(order_type):
+def mark_order_doing(order_type):
+    # Marca a primeira encomenda pendente do tipo como "Doing"
     for order in order_status_list:
-        if not order["doing"] and order["type"] == order_type:
-            order["doing"] = True
+        if order["status"] == "Pending" and order["type"] == order_type:
+            order["status"] = "Doing"
+            break
+
+def mark_order_done(order_type):
+    # Marca a primeira encomenda "Doing" do tipo como "Done"
+    for order in order_status_list:
+        if order["status"] == "Doing" and order["type"] == order_type:
+            order["status"] = "Done"
             break
 
 # --- Database connection and order loading (substitui o carregamento por ficheiro) ---
@@ -397,12 +405,43 @@ conn = psycopg2.connect(
 print("[MES] Conexão estabelecida com sucesso.")
 cursor = conn.cursor()
 
+def ensure_db_connection():
+    global conn, cursor
+    try:
+        # Testa se a conexão está aberta
+        if conn is None or conn.closed != 0:
+            print("[MES] Reabrindo conexão ao banco de dados...")
+            conn = psycopg2.connect(
+                host="db.fe.up.pt",
+                dbname="ii2521",
+                user="ii2521",
+                password="iind25"
+            )
+            cursor = conn.cursor()
+        else:
+            # Testa se o cursor está válido
+            cursor.execute("SELECT 1;")
+    except Exception as e:
+        print(f"[MES] Erro na conexão/cursor: {e}. Tentando reabrir...")
+        try:
+            conn = psycopg2.connect(
+                host="db.fe.up.pt",
+                dbname="ii2521",
+                user="ii2521",
+                password="iind25"
+            )
+            cursor = conn.cursor()
+        except Exception as e2:
+            print(f"[MES] Falha ao reabrir conexão: {e2}")
+            raise
+
 def fetch_today_orders(current_day):
+    ensure_db_connection()
     print(f"[MES] Buscando encomendas para o dia {current_day}...")
     cursor.execute("""
         SELECT id, type, quantity
         FROM orders.orders
-        WHERE execution_day = %s;
+        WHERE execution_day = %s AND status = 'in_progress';
     """, (current_day,))
     orders = cursor.fetchall()
     if not orders:
@@ -412,6 +451,7 @@ def fetch_today_orders(current_day):
     return orders
 
 def mark_as_queued(order_id):
+    ensure_db_connection()
     print(f"[MES] Atualizando status da encomenda {order_id} para 'queued'...")
     cursor.execute("""
         UPDATE orders.orders
@@ -422,9 +462,7 @@ def mark_as_queued(order_id):
     print(f"[MES] Encomenda {order_id} atualizada para 'queued'.")
 
 def insert_order(order_type, quantity, current_day):
-    """
-    Inserts a new order into the orders.orders table with the given type, quantity, and current day as date.
-    """
+    ensure_db_connection()
     cursor.execute("""
         INSERT INTO orders.orders (type, quantity, execution_day, status)
         VALUES (%s, %s, %s, 'received');
@@ -447,6 +485,7 @@ def load_orders():
             pending_orders = fetch_today_orders(current_day)
 
             new_orders = []
+            # Acrescentar à lista de status das encomendas
             for order in pending_orders:
                 order_id, order_type, quantity = order
                 for _ in range(quantity):
@@ -457,8 +496,10 @@ def load_orders():
                     if order_type == 6:
                         for _ in range(quantity):
                             new_orders.append(8)
+                            order_status_list.append({"type": 8, "date": current_day, "status": "Pending"})
                     else:
                         new_orders.append(order_type)
+                        order_status_list.append({"type": order_type, "date": current_day, "status": "Pending"})
                         print(f"[MES] Adicionando encomenda à fila: tipo={order_type}")
                 mark_as_queued(order_id)
                 print(f"[MES] Encomenda {order_id} processada.")
@@ -612,11 +653,11 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 if prod_order_queue and prod_order_queue[0] == saida_prevista:
                     prod_order_queue.popleft()
                     pending_orders.discard(saida_prevista)
-                    mark_order_done(saida_prevista)
+                    mark_order_doing(saida_prevista)  # Marca como "Doing"
                 else:
                     try:
                         prod_order_queue.remove(saida_prevista)
-                        mark_order_done(saida_prevista)
+                        mark_order_doing(saida_prevista)
                     except ValueError:
                         pass
                     pending_orders.discard(saida_prevista)
@@ -667,7 +708,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
 
 
         time.sleep(0.1)
-
 
 def read_codesys_variables():
     server_url = "opc.tcp://127.0.0.1:4840"
@@ -797,7 +837,6 @@ def read_codesys_variables():
     print("WH1:", WH1)
     print("WH2:", WH2)
 
-
 # --- Statistics Structures (dummy data for demonstration) ---
 machine_stats = {
     cell_num: {
@@ -830,9 +869,14 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def render_orders_table(self):
-        html = "<h2>Production Orders</h2><table border='1' style='margin:auto;'><tr><th>#</th><th>Type</th><th>Date</th><th>Status</th></tr>"
+        # Calcular o current_day com base no tempo de simulação
+        current_sim_time = time.time() - sim_start
+        current_day = int(current_sim_time // DAY_DURATION) + 1
+        html = "<h2>Product Orders</h2>"
+        html += f"<div style='margin-bottom:10px;'>current day: {current_day}</div>"
+        html += "<table border='1' style='margin:auto;'><tr><th>#</th><th>Type</th><th>Date</th><th>Status</th></tr>"
         for idx, order in enumerate(order_status_list):
-            status = "Done" if order["done"] else "Pending"
+            status = order["status"]
             html += f"<tr><td>{idx+1}</td><td>{order['type']}</td><td>{order['date']}</td><td>{status}</td></tr>"
         html += "</table>"
         return html
@@ -875,12 +919,15 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
             else:
                 return str(val)
 
+        wh1_count = sum(1 for x in WH1 if x != 0)
+        wh2_count = sum(1 for x in WH2 if x != 0)
+        wh1_occupation_pct = round(wh1_count / 32 * 100)
+        wh2_occupation_pct = round(wh2_count / 32 * 100)
+
         html = "<h2>Warehouse Buffers</h2>"
         html += "<table border='1' style='margin:auto;'>"
-        html += "<tr><th>WH1</th></tr>"
-        html += "<tr><td><pre>" + " ".join(colorize(x) for x in WH1) + "</pre></td></tr>"
-        html += "<tr><th>WH2</th></tr>"
-        html += "<tr><td><pre>" + " ".join(colorize(x) for x in WH2) + "</pre></td></tr>"
+        html += f"<tr><th>WH1</th><td><pre>{' '.join(colorize(x) for x in WH1)}</pre></td><td style='text-align:center;'>{wh1_occupation_pct}%</td></tr>"
+        html += f"<tr><th>WH2</th><td><pre>{' '.join(colorize(x) for x in WH2)}</pre></td><td style='text-align:center;'>{wh2_occupation_pct}%</td></tr>"
         html += "</table>"
         return html
 
@@ -902,11 +949,11 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
             <body>
             """
             html += "<h1>MES Monitoring Interface</h1>"
-            html += "<div style='display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;'>"
+            html += "<div style='display: flex; justify-content: center; gap: 40px, flex-wrap: wrap;'>"
             html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_orders_table() + "</div>"
             html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_machines_table() + "</div>"
             html += "</div>"
-            html += "<div style='display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin-top: 40px;'>"
+            html += "<div style='display: flex; justify-content: center; gap: 40px, flex-wrap: wrap; margin-top: 40px;'>"
             html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_wh_table() + "</div>"
             html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_unloading_table() + "</div>"
             html += "</div>"
