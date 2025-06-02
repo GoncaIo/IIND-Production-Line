@@ -12,6 +12,7 @@ import traceback
 
 # --- Definition of Pieces and Tools ---
 
+teste = True
 
 @dataclass
 class Pieces:
@@ -47,20 +48,21 @@ pending_p2 = deque()
 prod_order_queue = deque()
 cell_queues = {4: deque(), 5: deque(), 6: deque(), 7: deque(), 8: deque(), 9: deque()}
 remove_queue = deque()
+sentBackQueue = deque()
 
 Piece = [
-    Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20], Steps=1),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2], TIMES=[20, 20], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3], TIMES=[20, 20, 45], Steps=3),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4], TIMES=[20, 20, 45, 45], Steps=4),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 6], TIMES=[20, 20, 45, 30], Steps=4),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20, 20, 45, 45, 30], Steps=5),
-    Pieces(Initial_Piece=2, TRANSFORM=[6], TIMES=[15], Steps=1),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2], TIMES=[20, 20, 20], Steps=3),
-    Pieces(Initial_Piece=2, TRANSFORM=[6, 5], TIMES=[15, 20], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 5], TIMES=[20, 20, 20, 20], Steps=4),
-    Pieces(Initial_Piece=2, TRANSFORM=[6, 1], TIMES=[15, 30], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 1], TIMES=[20, 20, 20, 30], Steps=4),
+    Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20000], Steps=1),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2], TIMES=[20000, 20000], Steps=2),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3], TIMES=[20000, 20000, 45000], Steps=3),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4], TIMES=[20000, 20000, 45000, 45000], Steps=4),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 6], TIMES=[20000, 20000, 45000, 30000], Steps=4),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20000, 20000, 45000, 45000, 30000], Steps=5),
+    Pieces(Initial_Piece=2, TRANSFORM=[6], TIMES=[15000], Steps=1),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2], TIMES=[20000, 20000, 20000], Steps=3),
+    Pieces(Initial_Piece=2, TRANSFORM=[6, 5], TIMES=[15000, 20000], Steps=2),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 5], TIMES=[20000, 20000, 20000, 20000], Steps=4),
+    Pieces(Initial_Piece=2, TRANSFORM=[6, 1], TIMES=[15000, 30000], Steps=2),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 1], TIMES=[20000, 20000, 20000, 30000], Steps=4),
 ]
 
 Transformations = {
@@ -101,7 +103,8 @@ cell_tools = {
 
 def cell_can_process(piece: Pieces, cell_num: int):
     """Check if the cell has all tools needed for the piece's transformation."""
-    tools_needed = set(piece.TRANSFORM)
+    tools_needed = set(piece.TRANSFORM[0:3])
+    tools_needed.discard(0)
     tools_available = set(cell_tools.get(cell_num, []))
     return tools_needed.issubset(tools_available)
 
@@ -109,6 +112,8 @@ def cell_can_process(piece: Pieces, cell_num: int):
 def simulate_transformation_path(p: Pieces):
     current = p.Initial_Piece
     for tool in p.TRANSFORM:
+        if tool == 0:
+            return current
         result = Transformations.get((current, tool))
         if result is None:
             return None
@@ -118,12 +123,20 @@ def simulate_transformation_path(p: Pieces):
 def simulate_trans(p: Pieces):
     current = p.Initial_Piece
     for i in range(0,p.Curr_steps,1):
-        print(current,p.TRANSFORM[i])
         result = Transformations.get((current, p.TRANSFORM[i]))
         if result is None:
             return None
         current = result
     return current
+
+def apply_trans(p: Pieces):
+    p.Initial_Piece = simulate_trans(p)
+    p.TIMES = [i for i in p.TIMES[p.Curr_steps:] if i != 0]
+    p.TRANSFORM = [i for i in p.TRANSFORM[p.Curr_steps:] if i != 0]
+    p.Steps -= p.Curr_steps
+    p.Curr_steps = 0
+    return p
+    
 
 
 def calculate_raw_materials_recursive(
@@ -162,25 +175,27 @@ def print_prod_order_queue():
     print(f"WH1: {WH1}")
     print(f"WH2: {WH2}")
     
-def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None, mult = 1000):
+def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None):
     node_initial = client.get_node(f"{node_prefix}.Initial_Piece")
-    piece.Initial_Piece=simulate_trans(piece)
     node_tool = client.get_node(f"{node_prefix}.TOOL")
     node_times = client.get_node(f"{node_prefix}.TIMES")
     node_steps = client.get_node(f"{node_prefix}.Steps")
     curr_steps = client.get_node(f"{node_prefix}.Curr_steps")
-    piece.TRANSFORM = piece.TRANSFORM[piece.Curr_steps:]
-    piece.TIMES = piece.TIMES[piece.Curr_steps:]
-    piece.Steps = piece.Steps - piece.Curr_steps
+    ##piece.Initial_Piece = simulate_trans(piece)
+    ##piece.TRANSFORM = piece.TRANSFORM[piece.Curr_steps:]
+    ##piece.TIMES = piece.TIMES[piece.Curr_steps:]
+    ##piece.Steps -= piece.Curr_steps
+    ##piece.Curr_steps = 0
     tools_arr = piece.TRANSFORM + [0] * (6 - len(piece.TRANSFORM))
-    times_arr = [t * mult for t in piece.TIMES] + [0] * (6 - len(piece.TIMES))
+    times_arr = [t for t in piece.TIMES] + [0] * (6 - len(piece.TIMES))
+    node_initial.set_value(0,ua.VariantType.Int16)
+    time.sleep(0.25)
     node_initial.set_value(piece.Initial_Piece, ua.VariantType.Int16)
     node_tool.set_value(ua.Variant(tools_arr, ua.VariantType.Int16))
     node_times.set_value(ua.Variant(times_arr, ua.VariantType.Int64))
     node_steps.set_value(ua.Variant(piece.Steps, ua.VariantType.Int16))
-    curr_steps.set_value(ua.Variant(0, ua.VariantType.Int16))
+    curr_steps.set_value(ua.Variant(piece.Curr_steps, ua.VariantType.Int16))
     # Fix: use cell_num for logging, not node_prefix
-    print("PIECE END",piece)
     log(
         f"Recebeu: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}",
         cell_num=cell_num
@@ -283,7 +298,6 @@ class ProdLine:
                     csteps = node_cursteps.get_value()
                     this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps,Curr_steps=csteps)
                     this.state += 1
-                    print("p")
                 this.wait = datetime.now() + timedelta(seconds=0.5)
             elif this.state == 1:
                 if end_free:
@@ -306,7 +320,6 @@ class ProdLine:
 
                     this.state = 0
                     # busy será recalculado automaticamente pela propriedade
-                    print(this.p)
                     return this.p
                 else:
                     this.wait = datetime.now() + timedelta(seconds=0.5)
@@ -348,7 +361,7 @@ class EndLine:
         if(this.cap > 0):
             if(this.first_cell_free.get_value() == 1):
                 this.cap -= 1
-                send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=6), cell_num=this.cell_num)
+                send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=0), cell_num=this.cell_num)
                 return True
         return False
 
@@ -372,13 +385,7 @@ for filename in os.listdir(orders_folder):
                 if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
                     print(f"Erro: Peça {order_type} fora do intervalo permitido (3-11). Ignorando pedido.")
                     continue
-                # Decomposição especial para P6
-                if order_type == 6:
-                    for _ in range(quantity):
-                        order_queue.append((8, 1))
-                        order_queue.append(((6, 8), 1))
-                else:
-                    order_queue.append((order_type, quantity))
+                order_queue.append((order_type, quantity))
 # --- Após carregar a order_queue e calcular necessidades ---
 total_raw_materials = {"P1": 0, "P2": 0}
 for order_type, quantity in order_queue:
@@ -420,13 +427,17 @@ def prodline_worker(prod_line):
         time.sleep(0.1)
 
 def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_nodes):
+    eod_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.End_of_day")
     prev_l_free = {cell_num: l_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     prev_cell_free = {cell_num: cell_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     # Controle para detectar flanco negativo (True->False) de free_O de cada célula
     prev_cell_free_negedge = {cell_num: cell_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
+    prev_sent_back_l_free = l_free_nodes[10].get_value()
     # Lista de pedidos pendentes para cada célula (aguardando flanco negativo)
     pending_queue_add = {}
     pending_orders = set()  # Track orders waiting for confirmation
+
+    end = datetime.now() + timedelta(seconds=60)
 
     # Iniciar uma thread para cada ProdLine
     for prod_line in prodLines:
@@ -452,6 +463,35 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         for begin in beginLines:
             if begin.busy:
                 begin.tick()
+
+        #Enviar as peças que foram enviadas de volta (EX: P7)
+        if len(sentBackQueue) > 0:
+            curPiece = sentBackQueue[0]
+
+            for cell_num in range(4, 10):
+                prod_line = prodLines[cell_num - 4]
+                prod_line.cell_free_node = cell_free_nodes[cell_num]
+                cell_free = prod_line.cell_free_node.get_value()
+                if (
+                    cell_free
+                    and len(cell_queues[cell_num]) < 2
+                    and cell_can_process(curPiece, cell_num)
+                    and curPiece.Initial_Piece in WH1
+                    and cell_num not in pending_queue_add
+                ):
+                    saida_prevista = prod_line.start(curPiece)
+                    if saida_prevista is not None:
+                        pending_queue_add[cell_num] = saida_prevista
+                        log(
+                            f"Started processing *returned* piece P{curPiece.Initial_Piece} on ProdLine (aguardando flanco negativo)",
+                            cell_num=cell_num,
+                        )
+                        sentBackQueue.pop()
+                        print_cell_queue(cell_num)
+                        break
+
+
+
 
         # Processar ordens de produção: verifica qual célula pode processar e manda a receita
         if prod_order_queue:
@@ -496,6 +536,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                                 print_cell_queue(cell_num)
                                 break
 
+
         # Após mandar a receita, monitora flanco negativo de free_O para cada célula
         for cell_num in list(pending_queue_add.keys()):
             curr_cell_free = cell_free_nodes[cell_num].get_value()
@@ -532,6 +573,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 print_prod_order_queue()
                 del pending_queue_add[cell_num]
             prev_cell_free_negedge[cell_num] = curr_cell_free
+            
 
         # Adiciona controle para remoção da fila apenas no flanco negativo de free_O
         for cell_num in range(4, 10):
@@ -557,11 +599,13 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             cpIdx = simulate_trans(curPiece)
             endIdx = simulate_transformation_path(curPiece)
             whPos = WH2.index(cpIdx)
+            print("CurIdx=",cpIdx,"EndIdx=",endIdx)
             if cpIdx == endIdx:
                 placed = False
                 for line in end_lines:
                     print("Tried in line",line.cell_num)
                     if(not placed and line.putPiece(whPos)):
+                        print("Allegedly added piece")
                         remove_queue.pop()
                         WH2[whPos] = 0
                         placed = True
@@ -570,9 +614,33 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 print("Sending back:", curPiece)
                 if cell_free_nodes[10].get_value():
                     print("Cell free, sending back.")
-                    send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10, mult=1)
+                    curPiece = apply_trans(curPiece)
+                    send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10)
                     remove_queue.pop()
                     WH2[whPos] = 0
+
+        #VER SE ALGO FOI ENVIADO PARA TRAS
+        curr_sent_back_l_free = l_free_nodes[10].get_value()
+        if prev_sent_back_l_free and not curr_sent_back_l_free:
+            nodeTxt = "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.piece_I"
+            node_initial = client.get_node(f"{nodeTxt}.Initial_Piece")
+            node_tool = client.get_node(f"{nodeTxt}.TOOL")
+            node_times = client.get_node(f"{nodeTxt}.TIMES")
+            node_steps = client.get_node(f"{nodeTxt}.Steps")
+            curr_steps = client.get_node(f"{nodeTxt}.Curr_steps")
+            p = Pieces(node_initial.get_value(),node_tool.get_value(),node_times.get_value(),node_steps.get_value(),curr_steps.get_value())
+            WH1[WH1.index(0)] = p.Initial_Piece
+            print("Piece in sent back queue:",p)
+            sentBackQueue.append(p)
+        
+        prev_sent_back_l_free = curr_sent_back_l_free
+
+        if(datetime.now() > end):
+            
+            eod_node.set_value(1,ua.VariantType.Boolean)
+            time.sleep(5)
+            end = datetime.now() + timedelta(seconds=60)
+            eod_node.set_value(0,ua.VariantType.Boolean)
 
 
         time.sleep(0.1)
@@ -585,7 +653,6 @@ def read_codesys_variables():
     try:
         client.connect()
         log(f"Connected to OPC UA Server at {server_url}")
-        #print("TESTE:",simulate_trans(Pieces(1,[1,2,3,6,0,0],[20,20,45,40],4,3)))
         #send_piece_to_codesys(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I",Pieces(1,[1,2,3,6,0,0],[20,20,45,40],4,3),cell_num=10)
         entry_node = client.get_node(
             "ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.Entry_pieces"
@@ -649,7 +716,7 @@ def read_codesys_variables():
             7: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L4.free_O"),
             8: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L5.free_O"),
             9: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.L6.free_O"),
-            10: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT.free_O"),
+            10: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.free_O"),
         }
         piece_node_prefixes = {
             4: "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.U1.piece_I",
@@ -709,6 +776,7 @@ def read_codesys_variables():
 
 if __name__ == "__main__":
     try:
+        time.sleep(3)
         read_codesys_variables()
     except KeyboardInterrupt:
         print("MES: Execution interrupted by user (Ctrl+C).")
