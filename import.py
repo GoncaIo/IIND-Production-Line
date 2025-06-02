@@ -4,7 +4,7 @@ import json
 # Configuration
 UDP_IP = "localhost"   # 10.227.152.9
 UDP_PORT = 5666          
-JSON_FILE = "Orders\order.json"  
+JSON_FILE = r"Orders\order.json"  
 
 # Read JSON data
 with open(JSON_FILE, 'r', encoding='utf-8') as f:
