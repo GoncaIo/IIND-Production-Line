@@ -9,6 +9,10 @@ from collections import deque
 from datetime import datetime, timedelta
 import threading
 import traceback
+import http.server
+import socketserver
+import json
+import psycopg2 
 
 # --- Definition of Pieces and Tools ---
 
@@ -92,14 +96,19 @@ cell_capabilities = {
 
 # Map cell numbers (4-9) to their available tools (from your Machine Tools list)
 cell_tools = {
-    4: [1, 2, 3, 4],  # M1a e M1b
-    5: [2, 3, 4, 5],  # M2a e M2b
-    6: [3, 4, 5, 6],  # M3a e M3b
+    4: [1, 2, 3, 4],  # M1a and M1b
+    5: [2, 3, 4, 5],  # M2a and M2b
+    6: [3, 4, 5, 6],  # M3a and M3b
     7: [4, 5, 6, 1],  # 
     8: [5, 6, 1, 2],  # 
     9: [6, 1, 2, 3],  # 
 }
 
+DAY_DURATION = 60  
+
+# Simulation state
+sim_start = time.time()
+last_day = 0
 
 def cell_can_process(piece: Pieces, cell_num: int):
     """Check if the cell has all tools needed for the piece's transformation."""
@@ -107,7 +116,6 @@ def cell_can_process(piece: Pieces, cell_num: int):
     tools_needed.discard(0)
     tools_available = set(cell_tools.get(cell_num, []))
     return tools_needed.issubset(tools_available)
-
 
 def simulate_transformation_path(p: Pieces):
     current = p.Initial_Piece
@@ -137,8 +145,6 @@ def apply_trans(p: Pieces):
     p.Curr_steps = 0
     return p
     
-
-
 def calculate_raw_materials_recursive(
     piece_type, quantity, transform_map=Transformations
 ):
@@ -164,14 +170,14 @@ def cell_name(cell_num):
     else:
         return f"Cell{cell_num}"
 
-def log(msg, context=None, cell_num=None):
+def log(msg, cell_num=None):
     prefix = ""
     if cell_num is not None:
         prefix += f"{cell_name(cell_num)} - "
     print(f"{prefix}{msg}")
 
 def print_prod_order_queue():
-    print(f"Pedidos na fila: {list(prod_order_queue)}")
+    print(f"Orders in queue: {list(prod_order_queue)}")
     print(f"WH1: {WH1}")
     print(f"WH2: {WH2}")
     
@@ -197,7 +203,7 @@ def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None):
     curr_steps.set_value(ua.Variant(piece.Curr_steps, ua.VariantType.Int16))
     # Fix: use cell_num for logging, not node_prefix
     log(
-        f"Recebeu: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}",
+        f"Received: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}",
         cell_num=cell_num
     )
 
@@ -305,7 +311,7 @@ class ProdLine:
                     if this.cell_queues[this.cell_num]:
                         saida_prevista = this.cell_queues[this.cell_num].popleft()
                         log(
-                            f"Finished processing piece (previsão saída: P{saida_prevista}). Queue length now {len(this.cell_queues[this.cell_num])}",
+                            f"Finished processing piece (predicted output: P{saida_prevista}). Queue length now {len(this.cell_queues[this.cell_num])}",
                             cell_num=this.cell_num,
                         )
                     else:
@@ -313,10 +319,6 @@ class ProdLine:
                             "Finished processing but queue is empty!",
                             cell_num=this.cell_num,
                         )
-
-                    
-
-                    
 
                     this.state = 0
                     # busy será recalculado automaticamente pela propriedade
@@ -344,7 +346,7 @@ class ProdLine:
                 return saida_prevista  # Retorna a previsão para ser usada fora
             except ValueError:
                 log(
-                    f"Erro, não há P{piece_in.Initial_Piece} no WH1!",
+                    f"Error, there is no P{piece_in.Initial_Piece} in WH1!",
                     cell_num=this.cell_num,
                 )
         return None
@@ -370,49 +372,172 @@ class Order:
         this.piece = piece
         this.wip = False
 
+order_status_list = []
 
-# --- Load orders from ERP ---
-order_queue = deque()
-orders_folder = os.path.join(os.path.dirname(__file__), "Orders")
-for filename in os.listdir(orders_folder):
-    if filename.endswith(".json"):
-        with open(os.path.join(orders_folder, filename), "r") as file:
-            data = json.load(file)
-            for order in data.get("orders", []):
-                order_type = order.get("type")
-                quantity = order.get("quantity")
-                # Check for invalid piece type (menor que 3 ou maior que 11)
+# --- Database connection and order loading (replaces file loading) ---
+print("[MES] Starting database connection...")
+conn = psycopg2.connect(
+    host="db.fe.up.pt",
+    dbname="ii2521",
+    user="ii2521",
+    password="iind25"
+)
+print("[MES] Connection established successfully.")
+cursor = conn.cursor()
+
+def ensure_db_connection():
+    global conn, cursor
+    try:
+        # Test if the connection is open
+        if conn is None or conn.closed != 0:
+            print("[MES] Reopening database connection...")
+            conn = psycopg2.connect(
+                host="db.fe.up.pt",
+                dbname="ii2521",
+                user="ii2521",
+                password="iind25"
+            )
+            cursor = conn.cursor()
+        else:
+            # Test if the cursor is valid
+            cursor.execute("SELECT 1;")
+    except Exception as e:
+        print(f"[MES] Connection/cursor error: {e}. Trying to reopen...")
+        try:
+            conn = psycopg2.connect(
+                host="db.fe.up.pt",
+                dbname="ii2521",
+                user="ii2521",
+                password="iind25"
+            )
+            cursor = conn.cursor()
+        except Exception as e2:
+            print(f"[MES] Failed to reopen connection: {e2}")
+            raise
+
+def fetch_today_orders(current_day):
+    ensure_db_connection()
+    print(f"[MES] Fetching orders for day {current_day}...")
+    try:
+        cursor.execute("""
+            SELECT id, type, quantity
+            FROM orders.orders
+            WHERE execution_day = %s AND status = 'in_progress';
+        """, (current_day,))
+        orders = cursor.fetchall()
+    except psycopg2.OperationalError as e:
+        print(f"[MES] OperationalError: {e}. Retrying after reconnect...")
+        ensure_db_connection()
+        cursor.execute("""
+            SELECT id, type, quantity
+            FROM orders.orders
+            WHERE execution_day = %s AND status = 'in_progress';
+        """, (current_day,))
+        orders = cursor.fetchall()
+    if not orders:
+        print(f"[MES] There are no pieces to make on day {current_day}.")
+    else:
+        print(f"[MES] {len(orders)} order(s) found for day {current_day}.")
+    return orders
+
+def mark_as_queued(order_id):
+    ensure_db_connection()
+    print(f"[MES] Updating order {order_id} status to 'queued'...")
+    try:
+        cursor.execute("""
+            UPDATE orders.orders
+            SET status = 'queued'
+            WHERE id = %s;
+        """, (order_id,))
+        conn.commit()
+    except psycopg2.OperationalError as e:
+        print(f"[MES] OperationalError: {e}. Retrying after reconnect...")
+        ensure_db_connection()
+        cursor.execute("""
+            UPDATE orders.orders
+            SET status = 'queued'
+            WHERE id = %s;
+        """, (order_id,))
+        conn.commit()
+    print(f"[MES] Order {order_id} updated to 'queued'.")
+
+def insert_order(order_type, quantity, current_day):
+    ensure_db_connection()
+    try:
+        cursor.execute("""
+            INSERT INTO orders.orders (type, quantity, execution_day, status)
+            VALUES (%s, %s, %s, 'received');
+        """, (order_type, quantity, current_day))
+        conn.commit()
+    except psycopg2.OperationalError as e:
+        print(f"[MES] OperationalError: {e}. Retrying after reconnect...")
+        ensure_db_connection()
+        cursor.execute("""
+            INSERT INTO orders.orders (type, quantity, execution_day, status)
+            VALUES (%s, %s, %s, 'received');
+        """, (order_type, quantity, current_day))
+        conn.commit()
+    print(f"[MES] New order inserted: type={order_type}, quantity={quantity}, day={current_day}")
+
+def load_orders():
+    global last_day
+    while True:
+        current_sim_time = time.time() - sim_start
+        current_day = int(current_sim_time // DAY_DURATION) + 1
+        # Print simulated time and current day every 30 seconds
+        if int(current_sim_time) % 30 == 0:
+            print(f"[MES] Simulated time: {current_sim_time:.2f}s | Current day: {current_day}")
+
+        if current_day > last_day:
+            print(f"[MES] New day detected: {current_day}")
+            last_day = current_day
+            pending_orders = fetch_today_orders(current_day)
+
+            new_orders = []
+            # Add to the order status list
+            for order in pending_orders:
+                order_id, order_type, quantity = order
+                for _ in range(quantity):
+                    if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
+                        print(f"Error: Piece {order_type} out of allowed range (3-11). Ignoring order.")
+                        continue
+                    else:
+                        new_orders.append(order_type)
+                        order_status_list.append({"type": order_type, "date": current_day, "status": "Pending"})
+                        print(f"[MES] Adding order to queue: type={order_type}")
+                mark_as_queued(order_id)
+                print(f"[MES] Order {order_id} processed.")
+
+            prod_order_queue.extend(new_orders)
+
+            # Calculate raw material needs and update pending_p1/pending_p2
+            total_raw_materials = {"P1": 0, "P2": 0}
+            for order_type in list(prod_order_queue):
                 if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
-                    print(f"Erro: Peça {order_type} fora do intervalo permitido (3-11). Ignorando pedido.")
+                    print(f"Error: Piece {order_type} out of allowed range (3-11). Ignoring order.")
                     continue
-                order_queue.append((order_type, quantity))
-# --- Após carregar a order_queue e calcular necessidades ---
-total_raw_materials = {"P1": 0, "P2": 0}
-for order_type, quantity in order_queue:
-    # Ajuste para decomposição: se for (6, 8), peça inicial é 8
-    if (isinstance(order_type, int) and (order_type > 11 or order_type < 3)) or (isinstance(order_type, tuple) and (order_type[0] > 11 or order_type[0] < 3)):
-        print(f"Erro: Peça {order_type} fora do intervalo permitido (3-11). Ignorando pedido.")
-        continue
-    needs = calculate_raw_materials_recursive(order_type, quantity)
-    total_raw_materials["P1"] += needs["P1"]
-    total_raw_materials["P2"] += needs["P2"]
-    for _ in range(quantity):
-        prod_order_queue.append(order_type)
-log(f"Total P1 needed for all orders: {total_raw_materials['P1']}")
-log(f"Total P2 needed for all orders: {total_raw_materials['P2']}")
-pending_p1.clear()
-pending_p2.clear()
-for _ in range(total_raw_materials["P1"]):
-    pending_p1.append(1)
-for _ in range(total_raw_materials["P2"]):
-    pending_p2.append(2)
-print_prod_order_queue()
+                needs = calculate_raw_materials_recursive(order_type, 1)
+                total_raw_materials["P1"] += needs["P1"]
+                total_raw_materials["P2"] += needs["P2"]
+            log(f"Total P1 needed for all orders: {total_raw_materials['P1']}")
+            log(f"Total P2 needed for all orders: {total_raw_materials['P2']}")
+            pending_p1.clear()
+            pending_p2.clear()
+            for _ in range(total_raw_materials["P1"]):
+                pending_p1.append(1)
+            for _ in range(total_raw_materials["P2"]):
+                pending_p2.append(2)
+            print_prod_order_queue()
+            print(f"[MES] Production queue for day {current_day}: {list(prod_order_queue)}")
+        time.sleep(1)
 
-
+# --- Thread to load orders daily ---
+order_loader_thread = threading.Thread(target=load_orders, daemon=True)
+order_loader_thread.start()
 
 def print_cell_queue(cell_num):
     fila = list(cell_queues[cell_num])
-    print(f"{cell_name(cell_num)} - fila: {fila}")
+    print(f"{cell_name(cell_num)} - queue: {fila}")
 
 def prodline_worker(prod_line):
     while True:
@@ -423,40 +548,40 @@ def prodline_worker(prod_line):
                 WH2[idx] = simulate_trans(result_piece)
                 remove_queue.append(result_piece)
             except ValueError:
-                print(f"WH2 is full, cannot store more pieces (Célula {prod_line.cell_num})")
+                print(f"WH2 is full, cannot store more pieces (Cell {prod_line.cell_num})")
         time.sleep(0.1)
 
 def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_nodes):
     eod_node = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.End_of_day")
     prev_l_free = {cell_num: l_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     prev_cell_free = {cell_num: cell_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
-    # Controle para detectar flanco negativo (True->False) de free_O de cada célula
+    # Control to detect negative edge (True->False) of free_O for each cell
     prev_cell_free_negedge = {cell_num: cell_free_nodes[cell_num].get_value() for cell_num in range(4, 10)}
     prev_sent_back_l_free = l_free_nodes[10].get_value()
-    # Lista de pedidos pendentes para cada célula (aguardando flanco negativo)
+    # List of pending requests for each cell (waiting for negative edge)
     pending_queue_add = {}
     pending_orders = set()  # Track orders waiting for confirmation
 
     end = datetime.now() + timedelta(seconds=60)
 
-    # Iniciar uma thread para cada ProdLine
+    # Start a thread for each ProdLine
     for prod_line in prodLines:
         t = threading.Thread(target=prodline_worker, args=(prod_line,), daemon=True)
         t.start()
 
     while True:
-        # Atualizar o estado de cell_free_node de cada linha antes de qualquer decisão
+        # Update the state of cell_free_node for each line before any decision
         for prod_line in prodLines:
             prod_line.cell_free_node = cell_free_nodes[prod_line.cell_num]
         for begin in beginLines:
             begin.cell_free_node = cell_free_nodes[begin.cell_num]
 
-        # Monitorar flanco positivo de L1.free_O a L6.free_O (mantém para debug/visualização)
+        # Monitor positive edge of L1.free_O to L6.free_O (kept for debug/visualization)
         for cell_num in range(4, 10):
             curr_l_free = l_free_nodes[cell_num].get_value()
             prev_l_free[cell_num] = curr_l_free
 
-        # Alimentar linhas de entrada
+        # Feed entry lines
         for begin in beginLines:
             begin.cell_free_node = cell_free_nodes[begin.cell_num]
             begin.start()
@@ -464,7 +589,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             if begin.busy:
                 begin.tick()
 
-        #Enviar as peças que foram enviadas de volta (EX: P7)
+        #Send pieces that were sent back (EX: P7)
         if len(sentBackQueue) > 0:
             curPiece = sentBackQueue[0]
 
@@ -483,22 +608,19 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     if saida_prevista is not None:
                         pending_queue_add[cell_num] = saida_prevista
                         log(
-                            f"Started processing *returned* piece P{curPiece.Initial_Piece} on ProdLine (aguardando flanco negativo)",
+                            f"Started processing *returned* piece P{curPiece.Initial_Piece} on ProdLine (waiting for negative edge)",
                             cell_num=cell_num,
                         )
                         sentBackQueue.pop()
                         print_cell_queue(cell_num)
                         break
 
-
-
-
-        # Processar ordens de produção: verifica qual célula pode processar e manda a receita
+        # Process production orders: check which cell can process and send the recipe
         if prod_order_queue:
             current_piece_type = prod_order_queue[0]
-            # Só processa se não estiver pendente de confirmação
+            # Only process if not pending confirmation
             if current_piece_type not in pending_orders:
-                # Ajuste para decomposição: se for (6, 8), buscar peça com Initial_Piece=8 e TRANSFORM terminando em 6
+                # Adjustment for decomposition: if (6, 8), look for piece with Initial_Piece=8 and TRANSFORM ending in 6
                 if isinstance(current_piece_type, tuple) and current_piece_type[0] == 6 and current_piece_type[1] == 8:
                     piece = next(
                         (p for p in Piece if p.Initial_Piece == 8 and p.TRANSFORM and p.TRANSFORM[-1] == 6),
@@ -530,23 +652,23 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                                 pending_queue_add[cell_num] = saida_prevista
                                 pending_orders.add(current_piece_type)  # Mark as pending
                                 log(
-                                    f"Started processing piece P{current_piece_type} on ProdLine (aguardando flanco negativo de free_O para entrar na fila)",
+                                    f"Started processing piece P{current_piece_type} on ProdLine (waiting for negative edge of free_O to enter the queue)",
                                     cell_num=cell_num,
                                 )
                                 print_cell_queue(cell_num)
                                 break
 
 
-        # Após mandar a receita, monitora flanco negativo de free_O para cada célula
+        # After sending the recipe, monitor negative edge of free_O for each cell
         for cell_num in list(pending_queue_add.keys()):
             curr_cell_free = cell_free_nodes[cell_num].get_value()
-            # Flanco negativo: True -> False
+            # Negative edge: True -> False
             if prev_cell_free_negedge[cell_num] and not curr_cell_free:
                 saida_prevista = pending_queue_add[cell_num]
                 cell_queues[cell_num].append(saida_prevista)
-                # Remover a peça inicial correspondente do WH1 ao entrar na fila da célula
+                # Remove the corresponding initial piece from WH1 when entering the cell queue
                 piece_initial = None
-                # Encontrar a peça inicial correspondente ao tipo saida_prevista
+                # Find the initial piece corresponding to the type saida_prevista
                 for p in Piece:
                     if simulate_transformation_path(p) == saida_prevista:
                         piece_initial = p.Initial_Piece
@@ -554,13 +676,13 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 if piece_initial is not None and piece_initial in WH1:
                     idx = WH1.index(piece_initial)
                     WH1[idx] = 0
-                    log(f"Removida peça inicial P{piece_initial} do WH1 ao entrar na fila da célula {cell_num}", cell_num=cell_num)
+                    log(f"Removed initial piece P{piece_initial} from WH1 when entering the queue of cell {cell_num}", cell_num=cell_num)
                 log(
-                    f"Peça {saida_prevista} entrou na fila da célula {cell_num} (flanco negativo de free_O)",
+                    f"Piece {saida_prevista} entered the queue of cell {cell_num} (negative edge of free_O)",
                     cell_num=cell_num,
                 )
                 print_cell_queue(cell_num)
-                # Remove o pedido da fila e do pending_orders
+                # Remove the order from the queue and from pending_orders
                 if prod_order_queue and prod_order_queue[0] == saida_prevista:
                     prod_order_queue.popleft()
                     pending_orders.discard(saida_prevista)
@@ -575,22 +697,22 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             prev_cell_free_negedge[cell_num] = curr_cell_free
             
 
-        # Adiciona controle para remoção da fila apenas no flanco negativo de free_O
+        # Add control to remove from the queue only on the negative edge of free_O
         for cell_num in range(4, 10):
             curr_l_free = l_free_nodes[cell_num].get_value()
-            # Se havia peça na fila e free_O passou de True para False, remove da fila
+            # If there was a piece in the queue and free_O went from True to False, remove from the queue
             if not prev_l_free[cell_num] and curr_l_free:
                 if cell_queues[cell_num]:
                     removed = cell_queues[cell_num].popleft()
-                    log(f"Peça removida da fila da célula {cell_num} devido a flanco negativo de U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
-                    # Adiciona a peça removida no WH2
+                    log(f"Piece removed from the queue of cell {cell_num} due to negative edge of U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
+                    # Add the removed piece to WH2
                     try:
                         index = WH2.index(0)
                         WH2[index] = removed
                         ##remove_queue.append(removed)
-                        print(f"Stored transformed piece {removed} in WH2 at position {index} (Célula {cell_num})")
+                        print(f"Stored transformed piece {removed} in WH2 at position {index} (Cell {cell_num})")
                     except ValueError:
-                        print(f"WH2 is full, cannot store more pieces (Célula {cell_num})")
+                        print(f"WH2 is full, cannot store more pieces (Cell {cell_num})")
                     print_cell_queue(cell_num)
             prev_l_free[cell_num] = curr_l_free
 
@@ -619,7 +741,7 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     remove_queue.pop()
                     WH2[whPos] = 0
 
-        #VER SE ALGO FOI ENVIADO PARA TRAS
+        #CHECK IF SOMETHING WAS SENT BACK
         curr_sent_back_l_free = l_free_nodes[10].get_value()
         if prev_sent_back_l_free and not curr_sent_back_l_free:
             nodeTxt = "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LT1.piece_I"
@@ -704,7 +826,7 @@ def read_codesys_variables():
                 "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UW.free_O"
             )
         }
-        # Adiciona os nós dos tapetes de saída (LA, LB, LC, LCD, L1, L2, L3, L4, L5, L6, LT)
+        # Add output conveyor nodes (LA, LB, LC, LCD, L1, L2, L3, L4, L5, L6, LT)
         l_free_nodes = {
             0: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LA.free_O"),
             1: client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.LB.free_O"),
@@ -773,10 +895,156 @@ def read_codesys_variables():
     print("WH1:", WH1)
     print("WH2:", WH2)
 
+# --- Statistics Structures (dummy data for demonstration) ---
+machine_stats = {
+    cell_num: {
+        "total_operating_time": 0.0,
+        "occupation_percentage": 0.0,
+        "tool_operating_time": {},
+        "tool_changes": 0,
+        "operated_workpieces": {},
+        "total_workpieces": 0,
+    }
+    for cell_num in range(4, 10)
+}
+
+unloading_stats = {
+    dock_num: {
+        "total_unloaded": 0,
+        "by_type": {}
+    }
+    for dock_num in range(11, 15)
+}
+
+# --- HTTP Server for Monitoring ---
+class MESRequestHandler(http.server.BaseHTTPRequestHandler):
+    def _set_headers(self, content_type="text/html"):
+        self.send_response(200)
+        self.send_header("Content-type", content_type)
+        # Add header to allow auto-refresh every 2 seconds for HTML pages
+        if content_type == "text/html":
+            self.send_header("Refresh", "2")
+        self.end_headers()
+
+    def render_orders_table(self):
+        # Calculate current_day based on simulation time
+        current_sim_time = time.time() - sim_start
+        current_day = int(current_sim_time // DAY_DURATION) + 1
+        html = "<h2>Product Orders</h2>"
+        html += f"<div style='margin-bottom:10px;'>current day: {current_day}</div>"
+        html += "<table border='1' style='margin:auto;'><tr><th>#</th><th>Type</th><th>Date</th><th>Status</th></tr>"
+        for idx, order in enumerate(order_status_list):
+            status = order["status"]
+            html += f"<tr><td>{idx+1}</td><td>{order['type']}</td><td>{order['date']}</td><td>{status}</td></tr>"
+        html += "</table>"
+        return html
+
+    def render_machines_table(self):
+        html = "<h2>Machine Statistics</h2><table border='1' style='margin:auto;'><tr><th>Cell</th><th>Total Operating Time</th><th>Occupation %</th><th>Tool Changes</th><th>Total Workpieces</th><th>Tool Operating Time</th><th>Operated Workpieces</th></tr>"
+        for cell_num, stats in machine_stats.items():
+            tool_op = "<br>".join(f"{tool}: {secs}s" for tool, secs in stats["tool_operating_time"].items())
+            op_wp = "<br>".join(f"{typ}: {cnt}" for typ, cnt in stats["operated_workpieces"].items())
+            html += (
+                f"<tr><td>{cell_num-3}</td>"
+                f"<td>{stats['total_operating_time']}</td>"
+                f"<td>{stats['occupation_percentage']}</td>"
+                f"<td>{stats['tool_changes']}</td>"
+                f"<td>{stats['total_workpieces']}</td>"
+                f"<td>{tool_op or '-'}</td>"
+                f"<td>{op_wp or '-'}</td></tr>"
+            )
+        html += '</table>'
+        return html
+
+    def render_unloading_table(self):
+        html = "<h2>Unloading Dock Statistics</h2><table border='1' style='margin:auto;'><tr><th>Dock</th><th>Total</th><th>Type</th></tr>"
+        for dock_num, stats in unloading_stats.items():
+            by_type = "<br>".join(f"{typ}: {cnt}" for typ, cnt in stats["by_type"].items())
+            html += (
+                f"<tr><td>{dock_num-10}</td>"
+                f"<td>{stats['total_unloaded']}</td>"
+                f"<td>{by_type or '-'}</td></tr>"
+            )
+        html += '</table>'
+        return html
+
+    def render_wh_table(self):
+        def colorize(val):
+            if val == 1:
+                return '<span style="color:brown;">1</span>'
+            elif val == 2:
+                return '<span style="color:red;">2</span>'
+            else:
+                return str(val)
+
+        wh1_count = sum(1 for x in WH1 if x != 0)
+        wh2_count = sum(1 for x in WH2 if x != 0)
+        wh1_occupation_pct = round(wh1_count / 32 * 100)
+        wh2_occupation_pct = round(wh2_count / 32 * 100)
+
+        html = "<h2>Warehouse Buffers</h2>"
+        html += "<table border='1' style='margin:auto;'>"
+        html += f"<tr><th>WH1</th><td><pre>{' '.join(colorize(x) for x in WH1)}</pre></td><td style='text-align:center;'>{wh1_occupation_pct}%</td></tr>"
+        html += f"<tr><th>WH2</th><td><pre>{' '.join(colorize(x) for x in WH2)}</pre></td><td style='text-align:center;'>{wh2_occupation_pct}%</td></tr>"
+        html += "</table>"
+        return html
+
+    def do_GET(self):
+        if self.path == "/" or self.path == "/index.html":
+            self._set_headers()
+            html = """
+            <html>
+            <head>
+                <title>MES Monitor</title>
+                <style>
+                    body { text-align: center; font-family: Arial, sans-serif; }
+                    h1, h2 { text-align: center; }
+                    ul { display: inline-block; text-align: left; }
+                    table { margin: auto; }
+                    .section { margin-bottom: 40px; }
+                </style>
+            </head>
+            <body>
+            """
+            html += "<h1>MES Monitoring Interface</h1>"
+            html += "<div style='display: flex; justify-content: center; gap: 40px, flex-wrap: wrap;'>"
+            html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_orders_table() + "</div>"
+            html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_machines_table() + "</div>"
+            html += "</div>"
+            html += "<div style='display: flex; justify-content: center; gap: 40px, flex-wrap: wrap; margin-top: 40px;'>"
+            html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_wh_table() + "</div>"
+            html += "<div class='section' style='flex: 1 1 45%; min-width: 350px;'>" + self.render_unloading_table() + "</div>"
+            html += "</div>"
+            html += "</body></html>"
+            self.wfile.write(html.encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not found")
+
+    def log_message(self, format, *args):
+        pass
+
+# --- Stub implementations for missing functions ---
+def update_machine_stats_on_start(cell_num, tool, ninit):
+    pass
+
+def update_machine_stats_on_end(cell_num, tool, duration):
+    pass
+
+def update_unloading_stats(cell_num, piece):
+    pass
+
+def start_mes_http_server(port=8080):
+    handler = MESRequestHandler
+    httpd = socketserver.TCPServer(("", port), handler)
+    print(f"MES monitoring HTTP server running at http://localhost:{port}/")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
 if __name__ == "__main__":
     try:
-        time.sleep(3)
+        # Start the MES HTTP server for monitoring
+        start_mes_http_server(port=8080)
         read_codesys_variables()
     except KeyboardInterrupt:
         print("MES: Execution interrupted by user (Ctrl+C).")
