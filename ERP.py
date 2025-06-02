@@ -37,6 +37,11 @@ def udp_listener():
             received = json.loads(data.decode())
             print(f"[DEBUG] Data received: {received}")
 
+             # Defensive: check if received is None
+            if received is None:
+                print("[ERROR] Received data is None, skipping...")
+                continue
+
             # If it's a list of orders, process all
             if isinstance(received, list):
                 for client_order in received:
@@ -52,6 +57,19 @@ def udp_listener():
             print("[ERROR] Failed to process order:", e)
 
 def process_client_order(client_order):
+
+    print(f"[DEBUG] process_client_order: {client_order}")
+    # Defensive: check if client_order is not None and is a dict
+    if not client_order or not isinstance(client_order, dict):
+        print("[ERROR] client_order is None or not a dict:", client_order)
+        return
+
+    # Defensive: check required keys
+    required_keys = ['name', 'NIF', 'OrderID', 'orders']
+    for key in required_keys:
+        if key not in client_order:
+            print(f"[ERROR] Missing key '{key}' in client_order: {client_order}")
+            return
 
     name = client_order['name']
     nif = client_order['NIF']
