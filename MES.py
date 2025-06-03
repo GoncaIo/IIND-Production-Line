@@ -576,6 +576,10 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
     pending_orders = set()  # Track orders waiting for confirmation
     sendBackBreak = datetime.now()
 
+    # Controle de dia para End_of_day
+    last_eod_day = 0
+    eod_active_until = None
+
     ##end = datetime.now() + timedelta(seconds=60)
 
     # Start a thread for each ProdLine
@@ -789,6 +793,17 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             ##eod_node.set_value(0,ua.VariantType.Boolean)
 
 
+        # Controle de ativação End_of_day ao fim de cada dia
+        current_sim_time = time.time() - sim_start
+        current_day = int(current_sim_time // DAY_DURATION) + 1
+        if current_day > last_eod_day:
+            last_eod_day = current_day
+            eod_node.set_value(True, ua.VariantType.Boolean)
+            eod_active_until = datetime.now() + timedelta(seconds=5)
+        if eod_active_until and datetime.now() >= eod_active_until:
+            eod_node.set_value(False, ua.VariantType.Boolean)
+            eod_active_until = None
+
         time.sleep(0.1)
 
 
@@ -919,6 +934,28 @@ def read_codesys_variables():
     print("WH1:", WH1)
     print("WH2:", WH2)
 
+# --- Piece color mapping for HTML rendering ---
+PIECE_COLORS = {
+    1: "brown",
+    2: "red",
+    3: "orange",
+    4: "yellow",
+    5: "green",
+    6: "blue",
+    7: "violet",
+    8: "grey",
+    9: "white",
+    10: "cyan",
+    11: "pink",
+}
+
+def piece_colored(val):
+    """Return HTML span with color for piece number, or just str(val) if not a known piece."""
+    color = PIECE_COLORS.get(val)
+    if color:
+        return f'<span style="color:{color};">{val}</span>'
+    return str(val)
+
 # --- Statistics Structures (dummy data for demonstration) ---
 machine_stats = {
     cell_num: {
@@ -959,15 +996,17 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
         html += "<table border='1' style='margin:auto;'><tr><th>#</th><th>Type</th><th>Date</th><th>Status</th></tr>"
         for idx, order in enumerate(order_status_list):
             status = order["status"]
-            html += f"<tr><td>{idx+1}</td><td>{order['type']}</td><td>{order['date']}</td><td>{status}</td></tr>"
+            # Use piece_colored for the type column
+            html += f"<tr><td>{idx+1}</td><td>{piece_colored(order['type'])}</td><td>{order['date']}</td><td>{status}</td></tr>"
         html += "</table>"
         return html
 
     def render_machines_table(self):
         html = "<h2>Machine Statistics</h2><table border='1' style='margin:auto;'><tr><th>Cell</th><th>Total Operating Time</th><th>Occupation %</th><th>Tool Changes</th><th>Total Workpieces</th><th>Tool Operating Time</th><th>Operated Workpieces</th></tr>"
         for cell_num, stats in machine_stats.items():
-            tool_op = "<br>".join(f"{tool}: {secs}s" for tool, secs in stats["tool_operating_time"].items())
-            op_wp = "<br>".join(f"{typ}: {cnt}" for typ, cnt in stats["operated_workpieces"].items())
+            # Colorize tool and workpiece types
+            tool_op = "<br>".join(f"{piece_colored(tool)}: {secs}s" for tool, secs in stats["tool_operating_time"].items())
+            op_wp = "<br>".join(f"{piece_colored(typ)}: {cnt}" for typ, cnt in stats["operated_workpieces"].items())
             html += (
                 f"<tr><td>{cell_num-3}</td>"
                 f"<td>{stats['total_operating_time']}</td>"
@@ -983,7 +1022,7 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
     def render_unloading_table(self):
         html = "<h2>Unloading Dock Statistics</h2><table border='1' style='margin:auto;'><tr><th>Dock</th><th>Total</th><th>Type</th></tr>"
         for dock_num, stats in unloading_stats.items():
-            by_type = "<br>".join(f"{typ}: {cnt}" for typ, cnt in stats["by_type"].items())
+            by_type = "<br>".join(f"{piece_colored(typ)}: {cnt}" for typ, cnt in stats["by_type"].items())
             html += (
                 f"<tr><td>{dock_num-10}</td>"
                 f"<td>{stats['total_unloaded']}</td>"
@@ -994,12 +1033,8 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def render_wh_table(self):
         def colorize(val):
-            if val == 1:
-                return '<span style="color:brown;">1</span>'
-            elif val == 2:
-                return '<span style="color:red;">2</span>'
-            else:
-                return str(val)
+            # Use piece_colored for all piece numbers
+            return piece_colored(val) if isinstance(val, int) else str(val)
 
         wh1_count = sum(1 for x in WH1 if x != 0)
         wh2_count = sum(1 for x in WH2 if x != 0)

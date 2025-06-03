@@ -5,9 +5,9 @@
   "OrderID": 42,
   "orders": [
     {
-      "type": 7,
+      "type": 6,
       "quantity": 2,
-      "DDate": 15,
+      "DDate": 6,
       "Penalty": 5.0
     }
   ]
