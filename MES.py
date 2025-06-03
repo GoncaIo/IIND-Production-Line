@@ -141,8 +141,10 @@ def apply_trans(p: Pieces):
     p.Initial_Piece = simulate_trans(p)
     p.TIMES = [i for i in p.TIMES[p.Curr_steps:] if i != 0]
     p.TRANSFORM = [i for i in p.TRANSFORM[p.Curr_steps:] if i != 0]
+    p.Piece_chain = p.Piece_chain[p.Curr_steps:]
     p.Steps -= p.Curr_steps
     p.Curr_steps = 0
+    
     return p
     
 def calculate_raw_materials_recursive(
@@ -243,7 +245,7 @@ class BeginLine:
         entry_list[this.cell_num] = piece_initial
         this.entry_node.set_value(ua.Variant(entry_list, ua.VariantType.Int16))
         log(
-            f"Sent initial piece P{piece_initial} to line",
+            f"Sent initial piece P{piece_initial} to line (Piece_chain={ [piece_initial] })",
             cell_num=this.cell_num,
         )
         this.busy = True
