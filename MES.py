@@ -25,7 +25,7 @@ class Pieces:
     TIMES: List[int] = field(default_factory=list)  # In seconds
     Steps: int = 0
     Curr_steps: int = 0
-
+    Piece_chain: List[int] = field(default_factory=list)
 
 @dataclass
 class piece:
@@ -55,18 +55,18 @@ remove_queue = deque()
 sentBackQueue = deque()
 
 Piece = [
-    Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20000], Steps=1),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2], TIMES=[20000, 20000], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3], TIMES=[20000, 20000, 45000], Steps=3),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4], TIMES=[20000, 20000, 45000, 45000], Steps=4),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 6], TIMES=[20000, 20000, 45000, 30000], Steps=4),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20000, 20000, 45000, 45000, 30000], Steps=5),
-    Pieces(Initial_Piece=2, TRANSFORM=[6], TIMES=[15000], Steps=1),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2], TIMES=[20000, 20000, 20000], Steps=3),
-    Pieces(Initial_Piece=2, TRANSFORM=[6, 5], TIMES=[15000, 20000], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 5], TIMES=[20000, 20000, 20000, 20000], Steps=4),
-    Pieces(Initial_Piece=2, TRANSFORM=[6, 1], TIMES=[15000, 30000], Steps=2),
-    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 1], TIMES=[20000, 20000, 20000, 30000], Steps=4),
+    Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20000], Steps=1, Piece_chain=[1,3]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2], TIMES=[20000, 20000], Steps=2, Piece_chain=[1, 3, 4]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3], TIMES=[20000, 20000, 45000], Steps=3, Piece_chain=[1,3, 4, 5]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4], TIMES=[20000, 20000, 45000, 45000], Steps=4, Piece_chain=[1, 3, 4, 5, 8]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 6], TIMES=[20000, 20000, 45000, 30000], Steps=4, Piece_chain=[1, 3, 4, 5, 7]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 3, 4, 5], TIMES=[20000, 20000, 45000, 45000, 30000], Steps=5, Piece_chain=[1, 3, 4, 5, 8, 6]),
+    Pieces(Initial_Piece=2, TRANSFORM=[6], TIMES=[15000], Steps=1, Piece_chain=[2, 9]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2], TIMES=[20000, 20000, 20000], Steps=3, Piece_chain=[1, 3, 4, 10]),
+    Pieces(Initial_Piece=2, TRANSFORM=[6, 5], TIMES=[15000, 20000], Steps=2, Piece_chain=[2, 9, 10]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 5], TIMES=[20000, 20000, 20000, 20000], Steps=4, Piece_chain=[1, 3, 4, 9, 10]),
+    Pieces(Initial_Piece=2, TRANSFORM=[6, 1], TIMES=[15000, 30000], Steps=2, Piece_chain=[2, 9, 11]),
+    Pieces(Initial_Piece=1, TRANSFORM=[1, 2, 2, 1], TIMES=[20000, 20000, 20000, 30000], Steps=4, Piece_chain=[1, 3, 4, 9, 11]),
 ]
 
 Transformations = {
@@ -180,20 +180,26 @@ def print_prod_order_queue():
     print(f"Orders in queue: {list(prod_order_queue)}")
     print(f"WH1: {WH1}")
     print(f"WH2: {WH2}")
-    
+    # --- Print PLC warehouse vectors ---
+    try:
+        plc_wh1 = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.WH1").get_value()
+        plc_wh2 = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.WH2").get_value()
+        print(f"--- PLC Values ---")
+        print(f"PLC WH1: {plc_wh1}")
+        print(f"PLC WH2: {plc_wh2}")
+    except Exception as e:
+        print(f"Could not read PLC WH1/WH2: {e}")
+
 def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None):
     node_initial = client.get_node(f"{node_prefix}.Initial_Piece")
     node_tool = client.get_node(f"{node_prefix}.TOOL")
     node_times = client.get_node(f"{node_prefix}.TIMES")
     node_steps = client.get_node(f"{node_prefix}.Steps")
     curr_steps = client.get_node(f"{node_prefix}.Curr_steps")
-    ##piece.Initial_Piece = simulate_trans(piece)
-    ##piece.TRANSFORM = piece.TRANSFORM[piece.Curr_steps:]
-    ##piece.TIMES = piece.TIMES[piece.Curr_steps:]
-    ##piece.Steps -= piece.Curr_steps
-    ##piece.Curr_steps = 0
+    piece_chain = client.get_node(f"{node_prefix}.Piece_chain")
     tools_arr = piece.TRANSFORM + [0] * (6 - len(piece.TRANSFORM))
     times_arr = [t for t in piece.TIMES] + [0] * (6 - len(piece.TIMES))
+    pchain_arr = piece.Piece_chain + [0] * (7 - len(piece.Piece_chain))
     node_initial.set_value(0,ua.VariantType.Int16)
     time.sleep(0.25)
     node_initial.set_value(piece.Initial_Piece, ua.VariantType.Int16)
@@ -201,9 +207,10 @@ def send_piece_to_codesys(client, node_prefix, piece: Pieces, cell_num=None):
     node_times.set_value(ua.Variant(times_arr, ua.VariantType.Int64))
     node_steps.set_value(ua.Variant(piece.Steps, ua.VariantType.Int16))
     curr_steps.set_value(ua.Variant(piece.Curr_steps, ua.VariantType.Int16))
+    piece_chain.set_value(ua.Variant(pchain_arr, ua.VariantType.Int16))
     # Fix: use cell_num for logging, not node_prefix
     log(
-        f"Received: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}",
+        f"Received: Initial={piece.Initial_Piece}, TOOL={tools_arr}, TIMES={times_arr}, Steps={len(piece.TRANSFORM)}, Piece_chain={pchain_arr}",
         cell_num=cell_num
     )
 
@@ -297,12 +304,14 @@ class ProdLine:
                     node_times = client.get_node(f"{this.end_piece_node}.TIMES")
                     node_steps = client.get_node(f"{this.end_piece_node}.Steps")
                     node_cursteps = client.get_node(f"{this.end_piece_node}.Curr_steps")
+                    node_pchain = client.get_node(f"{this.end_piece_node}.Piece_chain")
                     ninit = node_initial.get_value()
                     ntool = node_tool.get_value()
                     ntime = node_times.get_value()
                     nsteps = node_steps.get_value()
                     csteps = node_cursteps.get_value()
-                    this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps,Curr_steps=csteps)
+                    pchain = node_pchain.get_value()
+                    this.p = Pieces(Initial_Piece=ninit,TRANSFORM=ntool,TIMES=ntime,Steps=nsteps,Curr_steps=csteps, Piece_chain=pchain)
                     this.state += 1
                 this.wait = datetime.now() + timedelta(seconds=0.5)
             elif this.state == 1:
@@ -763,7 +772,8 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             node_times = client.get_node(f"{nodeTxt}.TIMES")
             node_steps = client.get_node(f"{nodeTxt}.Steps")
             curr_steps = client.get_node(f"{nodeTxt}.Curr_steps")
-            p = Pieces(node_initial.get_value(),node_tool.get_value(),node_times.get_value(),node_steps.get_value(),curr_steps.get_value())
+            piece_chain = client.get_node(f"{nodeTxt}.Piece_chain")
+            p = Pieces(node_initial.get_value(),node_tool.get_value(),node_times.get_value(),node_steps.get_value(),curr_steps.get_value(), piece_chain.get_value())
             WH1[WH1.index(0)] = p.Initial_Piece
             print("Piece in sent back queue:",p)
             sentBackQueue.append(p)
