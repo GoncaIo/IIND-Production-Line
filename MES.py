@@ -479,9 +479,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         prod_line = prodLines[cell_num - 4]
                         prod_line.cell_free_node = cell_free_nodes[cell_num]
                         cell_free = prod_line.cell_free_node.get_value()
-                        print("Trying to send back in cell",cell_num)
-                    
-                        print("Tentar com i =",i)
                         if (
                             cell_free
                             and len(cell_queues[cell_num]) < 2
