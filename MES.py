@@ -49,6 +49,7 @@ prod_order_queue = deque()
 cell_queues = {4: deque(), 5: deque(), 6: deque(), 7: deque(), 8: deque(), 9: deque()}
 remove_queue = deque()
 sentBackQueue = deque()
+deliverQueue = deque()
 
 Piece = [
     Pieces(Initial_Piece=1, TRANSFORM=[1], TIMES=[20000], Steps=1, Piece_chain=[1,3]),
@@ -95,9 +96,9 @@ cell_tools = {
     4: [1, 2, 3, 4],  # M1a and M1b
     5: [2, 3, 4, 5],  # M2a and M2b
     6: [3, 4, 5, 6],  # M3a and M3b
-    7: [4, 5, 6, 1],  # 
-    8: [5, 6, 1, 2],  # 
-    9: [6, 1, 2, 3],  # 
+    7: [1, 4, 5, 6],  # 
+    8: [1, 2, 5, 6],  # 
+    9: [1, 2, 3, 6],  # 
 }
 
 DAY_DURATION = 60  
@@ -374,7 +375,7 @@ class EndLine:
         if(this.cap > 0):
             if(this.first_cell_free.get_value() == 1):
                 this.cap -= 1
-                send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=0), cell_num=this.cell_num)
+                send_piece_to_codesys(client, this.node_prefix, Pieces(piece,TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=0), cell_num=this.cell_num)
                 this.contents.append(piece)
                 return True
         return False
@@ -455,6 +456,32 @@ def fetch_today_orders(current_day):
     else:
         print(f"[MES] {len(orders)} order(s) found for day {current_day}.")
     return orders
+
+def fetch_due_today():
+    ensure_db_connection()
+    print(f"[MES] Fetching orders due today...")
+    try:
+        cursor.execute("""
+            SELECT id, type, quantity
+            FROM orders.orders
+            WHERE ddate = %s;
+        """, (1,))
+        orders = cursor.fetchall()
+    except psycopg2.OperationalError as e:
+        print(f"[MES] OperationalError: {e}. Retrying after reconnect...")
+        ensure_db_connection()
+        cursor.execute("""
+            SELECT id, type, quantity
+            FROM orders.orders
+            WHERE ddate = %s;
+        """, (1,))
+        orders = cursor.fetchall()
+    if not orders:
+        print(f"[MES] There are no pieces due today.")
+    else:
+        print(f"[MES] {len(orders)} order(s) found due today.")
+    return orders
+
 
 def mark_as_queued(order_id):
     ensure_db_connection()
@@ -799,7 +826,23 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         if eod_active_until and datetime.now() >= eod_active_until:
             eod_node.set_value(False, ua.VariantType.Boolean)
             eod_active_until = None
+            due = fetch_due_today()
+            if due != None:
+                for order in due:
+                    order_id, order_type, quantity = order
+                    for _ in range(quantity):
+                        deliverQueue.append(order_type)
 
+        if(not eod_active_until and len(deliverQueue) > 0):
+            curPiece = deliverQueue[0]
+            placed = False
+            for line in end_lines:
+                if(not placed and line.putPiece(curPiece)):
+                    print("Placed piece in end line")
+                    deliverQueue.pop()
+                    placed = True
+                    break
+    
         time.sleep(0.1)
 
 
