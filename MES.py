@@ -368,14 +368,20 @@ class EndLine:
         this.cell_num = cell_num
         this.cap = 6
         this.node_prefix = node_prefix
+        this.contents = []
 
     def putPiece(this, piece):
         if(this.cap > 0):
             if(this.first_cell_free.get_value() == 1):
                 this.cap -= 1
                 send_piece_to_codesys(client, this.node_prefix, Pieces(WH2[piece],TRANSFORM=[0,0,0,0,0,0],TIMES=[0,0,0,0,0,0],Steps=0), cell_num=this.cell_num)
+                this.contents.append(piece)
                 return True
         return False
+
+    def empty(this):
+        this.content=[]
+        this.cap = 6
 
 class Order:
     def __init__(this, piece: Pieces):
@@ -780,13 +786,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         
         prev_sent_back_l_free = curr_sent_back_l_free
 
-        ##if(datetime.now() > end):
-            
-            ##eod_node.set_value(1,ua.VariantType.Boolean)
-            ##time.sleep(5)
-            ##end = datetime.now() + timedelta(seconds=60)
-            ##eod_node.set_value(0,ua.VariantType.Boolean)
-
 
         # Controle de ativação End_of_day ao fim de cada dia
         current_sim_time = time.time() - sim_start
@@ -795,6 +794,8 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             last_eod_day = current_day
             eod_node.set_value(True, ua.VariantType.Boolean)
             eod_active_until = datetime.now() + timedelta(seconds=5)
+            for line in end_lines:
+                line.empty()
         if eod_active_until and datetime.now() >= eod_active_until:
             eod_node.set_value(False, ua.VariantType.Boolean)
             eod_active_until = None
@@ -1035,6 +1036,9 @@ class MESRequestHandler(http.server.BaseHTTPRequestHandler):
         def colorize(val):
             # Use piece_colored for all piece numbers
             return piece_colored(val) if isinstance(val, int) else str(val)
+        
+        WH1 = list(map(int, plc_wh1.get_value()))
+        WH2 = list(map(int, plc_wh2.get_value()))
 
         wh1_count = sum(1 for x in WH1 if x != 0)
         wh2_count = sum(1 for x in WH2 if x != 0)
