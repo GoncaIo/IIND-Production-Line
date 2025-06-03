@@ -15,9 +15,8 @@ import json
 import psycopg2 
 
 # --- Definition of Pieces and Tools ---
-
-teste = True
-
+WH1 = [0] * 32
+WH2 = [0] * 32
 @dataclass
 class Pieces:
     Initial_Piece: int
@@ -43,9 +42,6 @@ class piece:
             arr[2 + max_steps + i] = self.times[i] if i < self.n_steps else 0
         return arr
 
-
-WH1 = [0] * 32
-WH2 = [0] * 32
 
 pending_p1 = deque()
 pending_p2 = deque()
@@ -258,7 +254,6 @@ class BeginLine:
         if cell_free and this.state == 1:
             try:
                 index = WH1.index(0)
-                WH1[index] = this.current_piece
                 log(
                     f"Stored piece P{this.current_piece} in WH1 at position {index}",
                     cell_num=this.cell_num,
@@ -340,27 +335,30 @@ class ProdLine:
     def start(this, piece_in: Pieces):
         # Só inicia se houver menos de 3 peças na fila da célula
         if datetime.now() > this.wait and len(this.cell_queues[this.cell_num]) < 3:
-            # Envia comando para retirar a peça do WH1, mas só confirma quando free_O ficar False
-            try:
-                idx = WH1.index(piece_in.Initial_Piece)
-                # Não retira ainda, apenas guarda o índice para retirar depois
-                # Envia comando para a célula pegar a peça
-                saida_prevista = simulate_transformation_path(piece_in)
-                # Pass cell_num to send_piece_to_codesys for correct logging
-                send_piece_to_codesys(client, this.piece_node_prefix, piece_in, cell_num=this.cell_num)
-                this.piece = piece_in
-                this.state = 0
-                # Guardar o pending_wh1_remove para esta célula
-                if not hasattr(ProdLine, "pending_wh1_remove"):
-                    ProdLine.pending_wh1_remove = {}
-                ProdLine.pending_wh1_remove[this.cell_num] = (idx, piece_in.Initial_Piece)
-                this.wait = datetime.now() + timedelta(seconds=1)
-                return saida_prevista  # Retorna a previsão para ser usada fora
-            except ValueError:
+            WH1 = list(map(int, plc_wh1.get_value()))
+            # Check if the piece exists in WH1 before proceeding
+            if piece_in.Initial_Piece not in WH1:
                 log(
                     f"Error, there is no P{piece_in.Initial_Piece} in WH1!",
                     cell_num=this.cell_num,
                 )
+                print_prod_order_queue()
+                return None
+            # Envia comando para retirar a peça do WH1, mas só confirma quando free_O ficar False
+            idx = WH1.index(piece_in.Initial_Piece)
+            # Não retira ainda, apenas guarda o índice para retirar depois
+            # Envia comando para a célula pegar a peça
+            saida_prevista = simulate_transformation_path(piece_in)
+            # Pass cell_num to send_piece_to_codesys for correct logging
+            send_piece_to_codesys(client, this.piece_node_prefix, piece_in, cell_num=this.cell_num)
+            this.piece = piece_in
+            this.state = 0
+            # Guardar o pending_wh1_remove para esta célula
+            if not hasattr(ProdLine, "pending_wh1_remove"):
+                ProdLine.pending_wh1_remove = {}
+            ProdLine.pending_wh1_remove[this.cell_num] = (idx, piece_in.Initial_Piece)
+            this.wait = datetime.now() + timedelta(seconds=1)
+            return saida_prevista  # Retorna a previsão para ser usada fora
         return None
 
 class EndLine:
@@ -556,10 +554,6 @@ def prodline_worker(prod_line):
         result_piece = prod_line.tick()
         if result_piece is not None:
             try:
-                idx = WH2.index(0)
-                print("Trying to remove piece",result_piece,"'\n")
-                WH2[idx] = simulate_trans(result_piece)
-                print("Simulated trans is ",WH2[idx],'\n\n')
                 remove_queue.append(apply_trans(result_piece))
                 print("Remove queue",remove_queue)
             except ValueError:
@@ -589,7 +583,12 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
         t = threading.Thread(target=prodline_worker, args=(prod_line,), daemon=True)
         t.start()
 
+    
+
     while True:
+        WH1 = list(map(int, plc_wh1.get_value()))
+        WH2 = list(map(int, plc_wh2.get_value()))
+
         # Update the state of cell_free_node for each line before any decision
         for prod_line in prodLines:
             prod_line.cell_free_node = cell_free_nodes[prod_line.cell_num]
@@ -701,8 +700,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                         piece_initial = p.Initial_Piece
                         break
                 if piece_initial is not None and piece_initial in WH1:
-                    idx = WH1.index(piece_initial)
-                    WH1[idx] = 0
                     log(f"Removed initial piece P{piece_initial} from WH1 when entering the queue of cell {cell_num}", cell_num=cell_num)
                 log(
                     f"Piece {saida_prevista} entered the queue of cell {cell_num} (negative edge of free_O)",
@@ -732,10 +729,9 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                 if cell_queues[cell_num]:
                     removed = cell_queues[cell_num].popleft()
                     log(f"Piece removed from the queue of cell {cell_num} due to negative edge of U{cell_num-3}.free_O: {removed}", cell_num=cell_num)
+                    index = WH2.index(0)
                     # Add the removed piece to WH2
                     try:
-                        index = WH2.index(0)
-                        WH2[index] = removed
                         ##remove_queue.append(removed)
                         print(f"Stored transformed piece {removed} in WH2 at position {index} (Cell {cell_num})")
                     except ValueError:
@@ -755,7 +751,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     if(not placed and line.putPiece(whPos)):
                         print("Allegedly added piece")
                         remove_queue.pop()
-                        WH2[whPos] = 0
                         placed = True
                         break
             elif sendBackBreak < datetime.now():
@@ -765,7 +760,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
                     print("Applied transformation to piece. Now sending back:",curPiece)
                     send_piece_to_codesys(client, "ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I", curPiece, cell_num=10)
                     remove_queue.pop()
-                    WH2[whPos] = 0
                     sendBackBreak = datetime.now() + timedelta(seconds=2)
 
         #CHECK IF SOMETHING WAS SENT BACK
@@ -780,7 +774,6 @@ def mes_main_loop(beginLines, prodLines, end_lines, cell_free_nodes, l_free_node
             curr_steps = client.get_node(f"{nodeTxt}.Curr_steps")
             piece_chain = client.get_node(f"{nodeTxt}.Piece_chain")
             p = Pieces(node_initial.get_value(),node_tool.get_value(),node_times.get_value(),node_steps.get_value(),curr_steps.get_value(), piece_chain.get_value())
-            WH1[WH1.index(0)] = p.Initial_Piece
             print("Piece in sent back queue:",p)
             sentBackQueue.append(p)
             print("Sent back queue size",len(sentBackQueue))
@@ -815,6 +808,11 @@ def read_codesys_variables():
     client = Client(server_url)
     try:
         client.connect()
+        global plc_wh1
+        global plc_wh2
+
+        plc_wh1 = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.WH1")
+        plc_wh2 = client.get_node("ns=4;s=|var|CODESYS Control Win V3 x64.Application.GVL.WH2")
         log(f"Connected to OPC UA Server at {server_url}")
         #send_piece_to_codesys(client,"ns=4;s=|var|CODESYS Control Win V3 x64.Application.PLC_PRG.UT.piece_I",Pieces(1,[1,2,3,6,0,0],[20,20,45,40],4,3),cell_num=10)
         entry_node = client.get_node(
